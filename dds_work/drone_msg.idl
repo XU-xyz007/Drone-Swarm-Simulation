@@ -1,0 +1,14 @@
+struct DroneCmd
+{
+    long drone_id; // @Key
+    double target_x;
+    double target_y;
+};
+
+struct DroneState
+{
+    long drone_id; // @Key
+    double curr_x;
+    double curr_y;
+};
+
