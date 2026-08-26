@@ -21,8 +21,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{785d7a0b-67e0-41e5-98cd-cd1a35103cb5}</ProjectGuid>
-    <RootNamespace>first</RootNamespace>
+    <ProjectGuid>{c33360d0-ecb2-448d-bf1c-6439e969cc43}</ProjectGuid>
+    <RootNamespace>Controller</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -102,12 +102,12 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;_ZRDDSDLLIMPORT;_ZRDDSCPPINTERFACE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>D:\Programs\ZRDDS\ZRDDS-2.5.0\include\ZRDDSCoreInterface;D:\Programs\ZRDDS\ZRDDS-2.5.0\include\CPlusPlusInterface;D:\Desktop\dds_work\gen_code</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ZRDDS_HOME)\include\ZRDDSCoreInterface;$(ZRDDS_HOME)\include\CPlusPlusInterface;$(SolutionDir)SharedMessage\gen_code;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>D:\Programs\ZRDDS\ZRDDS-2.5.0\lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(ZRDDS_HOME)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>ZRDDSCppd_VS2015.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
@@ -126,15 +126,15 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\dds_work\gen_code\drone_msg.cpp" />
-    <ClCompile Include="..\..\..\dds_work\gen_code\drone_msgTypeSupport.cpp" />
+    <ClCompile Include="..\..\UAV-Swarm-DDS-MVP\dds_work\gen_code\drone_msg.cpp" />
+    <ClCompile Include="..\..\UAV-Swarm-DDS-MVP\dds_work\gen_code\drone_msgTypeSupport.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\dds_work\gen_code\drone_msg.h" />
-    <ClInclude Include="..\..\..\dds_work\gen_code\drone_msgDataReader.h" />
-    <ClInclude Include="..\..\..\dds_work\gen_code\drone_msgDataWriter.h" />
-    <ClInclude Include="..\..\..\dds_work\gen_code\drone_msgTypeSupport.h" />
+    <ClInclude Include="..\..\UAV-Swarm-DDS-MVP\dds_work\gen_code\drone_msg.h" />
+    <ClInclude Include="..\..\UAV-Swarm-DDS-MVP\dds_work\gen_code\drone_msgDataReader.h" />
+    <ClInclude Include="..\..\UAV-Swarm-DDS-MVP\dds_work\gen_code\drone_msgDataWriter.h" />
+    <ClInclude Include="..\..\UAV-Swarm-DDS-MVP\dds_work\gen_code\drone_msgTypeSupport.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
