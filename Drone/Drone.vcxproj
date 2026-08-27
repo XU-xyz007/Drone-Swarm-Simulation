@@ -126,15 +126,15 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\UAV-Swarm-DDS-MVP\dds_work\gen_code\drone_msg.cpp" />
-    <ClCompile Include="..\..\UAV-Swarm-DDS-MVP\dds_work\gen_code\drone_msgTypeSupport.cpp" />
+    <ClCompile Include="..\SharedMessage\gen_code\drone_msg.cpp" />
+    <ClCompile Include="..\SharedMessage\gen_code\drone_msgTypeSupport.cpp" />
     <ClCompile Include="mian.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\UAV-Swarm-DDS-MVP\dds_work\gen_code\drone_msg.h" />
-    <ClInclude Include="..\..\UAV-Swarm-DDS-MVP\dds_work\gen_code\drone_msgDataReader.h" />
-    <ClInclude Include="..\..\UAV-Swarm-DDS-MVP\dds_work\gen_code\drone_msgDataWriter.h" />
-    <ClInclude Include="..\..\UAV-Swarm-DDS-MVP\dds_work\gen_code\drone_msgTypeSupport.h" />
+    <ClInclude Include="..\SharedMessage\gen_code\drone_msg.h" />
+    <ClInclude Include="..\SharedMessage\gen_code\drone_msgDataReader.h" />
+    <ClInclude Include="..\SharedMessage\gen_code\drone_msgDataWriter.h" />
+    <ClInclude Include="..\SharedMessage\gen_code\drone_msgTypeSupport.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

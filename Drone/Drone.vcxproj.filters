@@ -15,27 +15,27 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\UAV-Swarm-DDS-MVP\dds_work\gen_code\drone_msg.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\UAV-Swarm-DDS-MVP\dds_work\gen_code\drone_msgTypeSupport.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="mian.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\SharedMessage\gen_code\drone_msg.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\SharedMessage\gen_code\drone_msgTypeSupport.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\UAV-Swarm-DDS-MVP\dds_work\gen_code\drone_msg.h">
+    <ClInclude Include="..\SharedMessage\gen_code\drone_msg.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\UAV-Swarm-DDS-MVP\dds_work\gen_code\drone_msgDataReader.h">
+    <ClInclude Include="..\SharedMessage\gen_code\drone_msgDataReader.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\UAV-Swarm-DDS-MVP\dds_work\gen_code\drone_msgDataWriter.h">
+    <ClInclude Include="..\SharedMessage\gen_code\drone_msgDataWriter.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\UAV-Swarm-DDS-MVP\dds_work\gen_code\drone_msgTypeSupport.h">
+    <ClInclude Include="..\SharedMessage\gen_code\drone_msgTypeSupport.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
