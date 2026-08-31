@@ -18,24 +18,24 @@
     <ClCompile Include="mian.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="..\SharedMessage\gen_code\drone_msg.cpp">
+    <ClCompile Include="..\SharedMessage\gen_code\DroneMessage.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="..\SharedMessage\gen_code\drone_msgTypeSupport.cpp">
+    <ClCompile Include="..\SharedMessage\gen_code\DroneMessageTypeSupport.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\SharedMessage\gen_code\drone_msg.h">
+    <ClInclude Include="..\SharedMessage\gen_code\DroneMessage.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="..\SharedMessage\gen_code\drone_msgDataReader.h">
+    <ClInclude Include="..\SharedMessage\gen_code\DroneMessageDataReader.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="..\SharedMessage\gen_code\drone_msgDataWriter.h">
+    <ClInclude Include="..\SharedMessage\gen_code\DroneMessageDataWriter.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="..\SharedMessage\gen_code\drone_msgTypeSupport.h">
+    <ClInclude Include="..\SharedMessage\gen_code\DroneMessageTypeSupport.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

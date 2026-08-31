@@ -18,6 +18,17 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\SharedMessage\gen_code\DroneMessage.cpp" />
+    <ClCompile Include="..\SharedMessage\gen_code\DroneMessageTypeSupport.cpp" />
+    <ClCompile Include="main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\SharedMessage\gen_code\DroneMessage.h" />
+    <ClInclude Include="..\SharedMessage\gen_code\DroneMessageDataReader.h" />
+    <ClInclude Include="..\SharedMessage\gen_code\DroneMessageDataWriter.h" />
+    <ClInclude Include="..\SharedMessage\gen_code\DroneMessageTypeSupport.h" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
@@ -125,17 +136,6 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClCompile Include="..\SharedMessage\gen_code\drone_msg.cpp" />
-    <ClCompile Include="..\SharedMessage\gen_code\drone_msgTypeSupport.cpp" />
-    <ClCompile Include="main.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="..\SharedMessage\gen_code\drone_msg.h" />
-    <ClInclude Include="..\SharedMessage\gen_code\drone_msgDataReader.h" />
-    <ClInclude Include="..\SharedMessage\gen_code\drone_msgDataWriter.h" />
-    <ClInclude Include="..\SharedMessage\gen_code\drone_msgTypeSupport.h" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

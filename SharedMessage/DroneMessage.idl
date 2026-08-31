@@ -1,0 +1,34 @@
+module SharedMessage
+{
+    // --- 状态枚举 ---
+    enum DroneStatus { 
+        ST_IDLE, ST_TAKEOFF, ST_CRUISE, ST_LANDING, ST_LANDED, ST_FAULT, ST_LOST 
+    };
+
+    // --- 命令枚举 ---
+    enum DroneCmdType {
+        CMD_TAKEOFF, CMD_FORMATION, CMD_LAND, CMD_EMERGENCY
+    };
+
+    // --- 1. 无人机状态频道 ---
+    struct DroneState {
+        unsigned long drone_id; //@key 
+        // 必须换行注释：我是谁(身份证)
+        DroneStatus status;
+        double x; 
+        double y;
+        unsigned long current_cmd_id; 
+    };
+
+    // --- 2. 主控命令频道 ---
+    struct DroneCmd {
+        unsigned long cmd_id;           
+        DroneCmdType cmd_type;          
+        unsigned long formation_id;     
+        string formation_text;          
+        double target_x;                
+        double target_y;                
+        double spacing;                 
+        unsigned long expected_count;   
+    };
+};
