@@ -2,6 +2,7 @@
 
 #include <windows.h>
 #include <cstring>
+#include <memory>
 #include <mutex>
 #include <string>
 
@@ -80,18 +81,28 @@ bool InitDDS()
         gParticipant, kCommandTopic, SharedMessage::DroneCmdTypeSupport::get_instance(), "command_reliable", NULL));
     gStateWriter = static_cast<SharedMessage::DroneStateDataWriter*>(DDSIF::PubTopic(
         gParticipant, kStateTopic, SharedMessage::DroneStateTypeSupport::get_instance(), "state_best_effort", NULL));
+    // DDS owns the listener after SubTopic succeeds (it is attached to the
+    // DataReader).  Keep temporary ownership until that handoff succeeds so a
+    // failed subscription cannot leak a listener.
+    std::unique_ptr<CommandReaderListener> commandListener(new CommandReaderListener());
     gCommandReader = DDSIF::SubTopic(gParticipant, kCommandTopic,
-        SharedMessage::DroneCmdTypeSupport::get_instance(), "command_reliable", new CommandReaderListener());
+        SharedMessage::DroneCmdTypeSupport::get_instance(), "command_reliable", commandListener.get());
+    if (gCommandReader != NULL) commandListener.release();
+
+    std::unique_ptr<StateReaderListener> stateListener(new StateReaderListener());
     gStateReader = DDSIF::SubTopic(gParticipant, kStateTopic,
-        SharedMessage::DroneStateTypeSupport::get_instance(), "state_best_effort", new StateReaderListener());
+        SharedMessage::DroneStateTypeSupport::get_instance(), "state_best_effort", stateListener.get());
+    if (gStateReader != NULL) stateListener.release();
 
     if (gCommandWriter != NULL && gStateWriter != NULL && gCommandReader != NULL && gStateReader != NULL) return true;
     if (gCommandReader != NULL) DDSIF::UnSubTopic(gCommandReader);
     if (gStateReader != NULL) DDSIF::UnSubTopic(gStateReader);
     if (gCommandWriter != NULL) DDSIF::UnPubTopic(gCommandWriter);
     if (gStateWriter != NULL) DDSIF::UnPubTopic(gStateWriter);
-    gParticipant = NULL; gCommandWriter = NULL; gStateWriter = NULL; gCommandReader = NULL; gStateReader = NULL;
+    // DDSIF::Finalize is the ZR-DDS simple-interface lifecycle endpoint: it
+    // releases the participant after all of its readers/writers are removed.
     DDSIF::Finalize();
+    gParticipant = NULL; gCommandWriter = NULL; gStateWriter = NULL; gCommandReader = NULL; gStateReader = NULL;
     return false;
 }
 
@@ -128,10 +139,12 @@ void ShutdownDDS()
     if (gStateReader != NULL) DDSIF::UnSubTopic(gStateReader);
     if (gCommandWriter != NULL) DDSIF::UnPubTopic(gCommandWriter);
     if (gStateWriter != NULL) DDSIF::UnPubTopic(gStateWriter);
-    gParticipant = NULL; gCommandWriter = NULL; gStateWriter = NULL; gCommandReader = NULL; gStateReader = NULL;
     gCommandCallback = CommandCallback();
     gStateCallback = StateCallback();
+    // There is no DDSIF::DeleteDP in the ZR-DDS simple interface.  Finalize
+    // is the documented owner-level cleanup and releases gParticipant here.
     DDSIF::Finalize();
+    gParticipant = NULL; gCommandWriter = NULL; gStateWriter = NULL; gCommandReader = NULL; gStateReader = NULL;
 }
 
 } // namespace SwarmComm
