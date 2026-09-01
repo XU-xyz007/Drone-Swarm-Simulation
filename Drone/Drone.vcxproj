@@ -128,7 +128,7 @@
   <ItemGroup>
     <ClCompile Include="..\SharedMessage\gen_code\DroneMessage.cpp" />
     <ClCompile Include="..\SharedMessage\gen_code\DroneMessageTypeSupport.cpp" />
-    <ClCompile Include="mian.cpp" />
+    <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\SharedMessage\gen_code\DroneMessage.h" />
