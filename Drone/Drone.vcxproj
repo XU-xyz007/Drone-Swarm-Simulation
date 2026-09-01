@@ -135,7 +135,7 @@ copy /Y &quot;$(ZRDDS_HOME)\lib\ZRDDSCppd_VS2015.dll&quot; &quot;$(OutDir)&quot;
     <ClCompile Include="..\Communication\DdsService.cpp" />
     <ClCompile Include="..\SharedMessage\gen_code\DroneMessage.cpp" />
     <ClCompile Include="..\SharedMessage\gen_code\DroneMessageTypeSupport.cpp" />
-    <ClCompile Include="mian.cpp" />
+    <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Communication\DdsService.h" />
