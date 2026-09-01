@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<zrdds_qos xmlns="http://www.omg.org/dds/">
+  <qos_library name="default_lib">
+    <qos_profile name="default_profile">
+      <participantfactory_qos name="non_rio" />
+      <participant_qos name="udp_dp">
+        <discovery_config>
+          <participant_liveliness_assert_period><sec>3</sec><nanosec>0</nanosec></participant_liveliness_assert_period>
+          <participant_liveliness_lease_duration><sec>10</sec><nanosec>0</nanosec></participant_liveliness_lease_duration>
+        </discovery_config>
+        <usertraffic_receive_addresses><addresses><element>udpv4://default//0</element></addresses></usertraffic_receive_addresses>
+      </participant_qos>
+      <datawriter_qos name="command_reliable">
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>10</depth></history>
+        <resource_limits><max_samples>1024</max_samples><max_samples_per_instance>1024</max_samples_per_instance></resource_limits>
+      </datawriter_qos>
+      <datareader_qos name="command_reliable">
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>10</depth></history>
+      </datareader_qos>
+      <datawriter_qos name="state_best_effort">
+        <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind></reliability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
+      </datawriter_qos>
+      <datareader_qos name="state_best_effort">
+        <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind></reliability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
+      </datareader_qos>
+    </qos_profile>
+  </qos_library>
+</zrdds_qos>

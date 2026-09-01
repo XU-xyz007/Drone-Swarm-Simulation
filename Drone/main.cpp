@@ -1,26 +1,74 @@
-#include <iostream>
-#include "DroneMessage.h"
+#include <windows.h>
+#include <atomic>
+#include <cstdio>
+#include <cstdlib>
+#include <vector>
 
-int main() {
-    std::cout << "========== 无人机节点 (Drone) 启动 ==========" << std::endl;
+#include "../Communication/DdsService.h"
 
-    // 1. 声明自身状态数据
-    SharedMessage::DroneState my_state;
-    my_state.drone_id = 3; // 假设这是3号机
-    my_state.status = SharedMessage::ST_IDLE;
-    my_state.x = 0.0;
-    my_state.y = 0.0;
+namespace {
 
-    std::cout << "我是无人机 ID: " << my_state.drone_id << "，当前待命。" << std::endl;
+std::atomic<DDS_ULong> gCurrentCmdId(0);
+std::atomic<unsigned long long> gMovingUntilMs(0);
+std::atomic<bool> gPrintedStateCallback(false);
 
-    // TODO给组员: 在这里初始化 ZR-DDS 参与者
-    // TODO给组员: 创建 DataReader 监听 Topic_Drone_Command
-    // TODO给组员: 创建 DataWriter 发送 Topic_Drone_State (10Hz)
+} // namespace
 
-    // 模拟运行循环
-    while (true) {
-        // 保持进程不死
+// One process simulates N Drone nodes. This avoids launching N Windows
+// processes when A needs 64 or 99 state samples for UI stress testing.
+int main(int argc, char** argv)
+{
+    int droneCount = argc >= 2 ? std::atoi(argv[1]) : 5;
+    if (droneCount < 1) droneCount = 1;
+    if (droneCount > 99) droneCount = 99;
+
+    printf("========== FakeDrone (DDS command callback + 10 Hz states) ==========\n");
+    printf("Simulating %d DroneState publishers in one process. Ctrl+C to stop.\n", droneCount);
+
+    SwarmComm::SubscribeCmd([](const SharedMessage::DroneCmd& cmd) {
+        const DDS_ULong previous = gCurrentCmdId.exchange(cmd.cmd_id);
+        // Fake a three-second formation transition.  A real Drone's C-side
+        // motion state machine decides this interval from its own target error.
+        gMovingUntilMs.store(GetTickCount64() + 3000ULL);
+        printf("[FakeDrone] command callback: cmd_id=%u, formation=%u, text=%s, previous=%u\n",
+               (unsigned)cmd.cmd_id, (unsigned)cmd.formation_id,
+               cmd.formation_text == NULL ? "" : cmd.formation_text, (unsigned)previous);
+    });
+    SwarmComm::SubscribeState([](const SharedMessage::DroneState& state) {
+        bool expected = false;
+        if (gPrintedStateCallback.compare_exchange_strong(expected, true)) {
+            printf("[FakeDrone] state callback is active (first state: drone %u).\n", (unsigned)state.drone_id);
+        }
+    });
+    if (!SwarmComm::InitDDS()) {
+        printf("InitDDS failed. Ensure ZRDDS_QOS_PROFILES.xml and zrddslicence.lic are beside the executable.\n");
+        return 1;
     }
 
-    return 0;
+    std::vector<SharedMessage::DroneState> states(static_cast<size_t>(droneCount));
+    for (int i = 0; i < droneCount; ++i) {
+        SharedMessage::DroneStateInitialize(&states[static_cast<size_t>(i)]);
+        states[static_cast<size_t>(i)].drone_id = static_cast<DDS_ULong>(i + 1);
+        states[static_cast<size_t>(i)].status = SharedMessage::ST_IDLE;
+        states[static_cast<size_t>(i)].x = (i % 10) * 3.0;
+        states[static_cast<size_t>(i)].y = (i / 10) * 3.0;
+    }
+
+    while (true) {
+        const DDS_ULong cmdId = gCurrentCmdId.load();
+        const bool moving = cmdId != 0 && GetTickCount64() < gMovingUntilMs.load();
+        // C owns the tick schedule: 10 Hz while moving, 1 Hz while static.
+        // DdsService does not impose a rate or interpret a slower state stream
+        // as a disconnect.
+        const unsigned long periodMs = moving ? 100 : 1000;
+        for (size_t i = 0; i < states.size(); ++i) {
+            SharedMessage::DroneState& state = states[i];
+            state.current_cmd_id = cmdId;
+            state.status = cmdId == 0 ? SharedMessage::ST_IDLE : SharedMessage::ST_CRUISE;
+            SwarmComm::PublishState(state);
+        }
+        printf("[FakeDrone] published %d states at %lu Hz mode, current_cmd_id=%u\n",
+               droneCount, moving ? 10UL : 1UL, (unsigned)cmdId);
+        ZRSleep(periodMs);
+    }
 }
