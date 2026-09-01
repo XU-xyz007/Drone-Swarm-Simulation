@@ -1,7 +1,7 @@
 #pragma once
 
 #include <functional>
-#include "DroneMessage.h"
+#include "../SharedMessage/gen_code/DroneMessage.h"
 
 namespace SwarmComm {
 

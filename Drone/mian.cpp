@@ -9,6 +9,7 @@
 namespace {
 
 std::atomic<DDS_ULong> gCurrentCmdId(0);
+std::atomic<unsigned long long> gMovingUntilMs(0);
 std::atomic<bool> gPrintedStateCallback(false);
 
 } // namespace
@@ -26,6 +27,9 @@ int main(int argc, char** argv)
 
     SwarmComm::SubscribeCmd([](const SharedMessage::DroneCmd& cmd) {
         const DDS_ULong previous = gCurrentCmdId.exchange(cmd.cmd_id);
+        // Fake a three-second formation transition.  A real Drone's C-side
+        // motion state machine decides this interval from its own target error.
+        gMovingUntilMs.store(GetTickCount64() + 3000ULL);
         printf("[FakeDrone] command callback: cmd_id=%u, formation=%u, text=%s, previous=%u\n",
                (unsigned)cmd.cmd_id, (unsigned)cmd.formation_id,
                cmd.formation_text == NULL ? "" : cmd.formation_text, (unsigned)previous);
@@ -50,20 +54,21 @@ int main(int argc, char** argv)
         states[static_cast<size_t>(i)].y = (i / 10) * 3.0;
     }
 
-    unsigned long ticks = 0;
     while (true) {
         const DDS_ULong cmdId = gCurrentCmdId.load();
+        const bool moving = cmdId != 0 && GetTickCount64() < gMovingUntilMs.load();
+        // C owns the tick schedule: 10 Hz while moving, 1 Hz while static.
+        // DdsService does not impose a rate or interpret a slower state stream
+        // as a disconnect.
+        const unsigned long periodMs = moving ? 100 : 1000;
         for (size_t i = 0; i < states.size(); ++i) {
             SharedMessage::DroneState& state = states[i];
             state.current_cmd_id = cmdId;
             state.status = cmdId == 0 ? SharedMessage::ST_IDLE : SharedMessage::ST_CRUISE;
             SwarmComm::PublishState(state);
         }
-        ++ticks;
-        if (ticks % 10 == 0) {
-            printf("[FakeDrone] published %d states at 10 Hz, current_cmd_id=%u\n",
-                   droneCount, (unsigned)cmdId);
-        }
-        ZRSleep(100);
+        printf("[FakeDrone] published %d states at %lu Hz mode, current_cmd_id=%u\n",
+               droneCount, moving ? 10UL : 1UL, (unsigned)cmdId);
+        ZRSleep(periodMs);
     }
 }

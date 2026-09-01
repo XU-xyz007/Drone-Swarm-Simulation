@@ -6,9 +6,9 @@
 #include <string>
 
 #include "ZRDDSCppSimpleInterface.h"
-#include "DroneMessageDataReader.h"
-#include "DroneMessageDataWriter.h"
-#include "DroneMessageTypeSupport.h"
+#include "../SharedMessage/gen_code/DroneMessageDataReader.h"
+#include "../SharedMessage/gen_code/DroneMessageDataWriter.h"
+#include "../SharedMessage/gen_code/DroneMessageTypeSupport.h"
 
 using namespace DDS;
 
