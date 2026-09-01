@@ -23,14 +23,14 @@ DataReader* gStateReader = NULL;
 SwarmComm::CommandCallback gCommandCallback;
 SwarmComm::StateCallback gStateCallback;
 
-std::string QosPathBesideExecutable()
+std::string ExecutableDirectory()
 {
     char path[MAX_PATH] = {};
-    if (GetModuleFileNameA(NULL, path, MAX_PATH) == 0) return "ZRDDS_QOS_PROFILES.xml";
+    if (GetModuleFileNameA(NULL, path, MAX_PATH) == 0) return std::string();
     char* slash = strrchr(path, '\\');
-    if (slash == NULL) return "ZRDDS_QOS_PROFILES.xml";
+    if (slash == NULL) return std::string();
     *slash = '\0';
-    return std::string(path) + "\\ZRDDS_QOS_PROFILES.xml";
+    return std::string(path);
 }
 
 class CommandReaderListener : public SimpleDataReaderListener<SharedMessage::DroneCmd, SharedMessage::DroneCmdSeq, SharedMessage::DroneCmdDataReader> {
@@ -65,7 +65,13 @@ bool InitDDS()
 {
     std::lock_guard<std::mutex> lock(gMutex);
     if (gParticipant != NULL) return true;
-    const std::string qosPath = QosPathBesideExecutable();
+    // ZR-DDS searches the current directory for zrddslicence.lic.  Set it to
+    // the executable directory so users may launch from any PowerShell path.
+    const std::string executableDirectory = ExecutableDirectory();
+    if (!executableDirectory.empty()) SetCurrentDirectoryA(executableDirectory.c_str());
+    const std::string qosPath = executableDirectory.empty()
+        ? "ZRDDS_QOS_PROFILES.xml"
+        : executableDirectory + "\\ZRDDS_QOS_PROFILES.xml";
     if (DDSIF::Init(qosPath.c_str(), "non_rio") == NULL) return false;
     gParticipant = DDSIF::CreateDP(kDomainId, "udp_dp");
     if (gParticipant == NULL) { DDSIF::Finalize(); return false; }
