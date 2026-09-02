@@ -1,6 +1,7 @@
 #pragma once
 #include "IDroneStateCache.h"
 #include <unordered_map>
+#include <mutex>
 
 class DroneStateCache : public IDroneStateCache {
 public:
@@ -13,4 +14,5 @@ public:
 
 private:
     std::unordered_map<uint32_t, DroneState> m_states;
+    mutable std::mutex m_mutex;
 };

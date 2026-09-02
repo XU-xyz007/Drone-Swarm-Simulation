@@ -1,7 +1,7 @@
 #pragma once
 #include "IFormationChecker.h"
 #include <unordered_map>
-#include <unordered_set>
+#include <mutex>
 #include <cstdint>
 
 class FormationChecker : public IFormationChecker {
@@ -15,9 +15,11 @@ public:
     void reset() override;
 
 private:
+    size_t countIdleLocked() const;
+
     uint32_t m_expectedCount = 0;
     uint32_t m_latestCmdId = 0;
     std::unordered_map<uint32_t, uint32_t> m_droneCmdIds;
     std::unordered_map<uint32_t, DroneStatus> m_droneStatuses;
-    std::unordered_set<uint32_t> m_droneTransitioned;
+    mutable std::mutex m_mutex;
 };

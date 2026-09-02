@@ -37,6 +37,8 @@ MainWindow::MainWindow(ICommandSender* cmdSender,
     m_testReceiver->setDroneCount(8);
     m_testReceiver->setOnStateReceived([this](const DroneState& state) {
         m_stateCache->updateState(state);
+        m_formationChecker->updateDroneCmdId(state.drone_id, state.current_cmd_id);
+        m_formationChecker->updateDroneStatus(state.drone_id, state.status);
     });
     m_testReceiver->setOnDroneRemoved([this](uint32_t droneId) {
         m_stateCache->removeState(droneId);
@@ -302,10 +304,11 @@ void MainWindow::onTestModeToggled(bool checked) {
 
 void MainWindow::onCompletionCheck() {
     auto progress = m_formationChecker->getProgress();
+    uint32_t totalCount = static_cast<uint32_t>(m_spinN->value());
 
     if (!m_formationCompleted) {
         statusBar()->showMessage(QString::fromStdString(
-            "队形进行中，进度: " + std::to_string(progress.first) + "/" + std::to_string(progress.second)));
+            "队形进行中，进度: " + std::to_string(progress.first) + "/" + std::to_string(totalCount)));
     }
 
     if (m_formationChecker->isFormationComplete() && !m_formationCompleted) {
@@ -315,7 +318,7 @@ void MainWindow::onCompletionCheck() {
         std::cout << "[判定] 队形完成！" << std::endl;
 
         QMessageBox::information(this, "编队完成",
-            QString::fromStdString("所有 " + std::to_string(progress.second) + " 架无人机已到达目标位置！"),
+            QString::fromStdString("所有 " + std::to_string(totalCount) + " 架无人机已到达目标位置！"),
             QMessageBox::Ok);
     }
 }
