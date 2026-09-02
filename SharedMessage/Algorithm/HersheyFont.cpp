@@ -31,6 +31,65 @@ struct HersheyGlyph {
     std::vector<std::vector<HersheyPoint>> strokes;
 };
 
+void AddBasicLatinGlyphs(
+    std::unordered_map<std::uint32_t, HersheyGlyph>& glyphs) {
+    auto add = [&](char uppercase, int advance,
+                   std::vector<std::vector<HersheyPoint>> strokes) {
+        HersheyGlyph glyph;
+        glyph.minimum_x = 0;
+        glyph.maximum_x = advance;
+        glyph.strokes = std::move(strokes);
+        glyphs[static_cast<unsigned char>(uppercase)] = glyph;
+        const char lowercase = static_cast<char>(uppercase - 'A' + 'a');
+        glyphs[static_cast<unsigned char>(lowercase)] = std::move(glyph);
+    };
+
+    add('A', 15, {{{0, 20}, {6, 0}, {12, 20}},
+                  {{3, 11}, {9, 11}}});
+    add('B', 15, {{{0, 0}, {0, 20}},
+                  {{0, 0}, {8, 0}, {12, 3}, {12, 7}, {8, 10}, {0, 10}},
+                  {{0, 10}, {9, 10}, {13, 13}, {13, 17}, {9, 20}, {0, 20}}});
+    add('C', 15, {{{13, 3}, {10, 0}, {4, 0}, {1, 3}, {0, 8},
+                   {0, 12}, {1, 17}, {4, 20}, {10, 20}, {13, 17}}});
+    add('D', 15, {{{0, 0}, {0, 20}},
+                  {{0, 0}, {7, 0}, {11, 3}, {13, 7}, {13, 13},
+                   {11, 17}, {7, 20}, {0, 20}}});
+    add('E', 14, {{{12, 0}, {0, 0}, {0, 20}, {12, 20}},
+                  {{0, 10}, {9, 10}}});
+    add('F', 14, {{{12, 0}, {0, 0}, {0, 20}},
+                  {{0, 10}, {9, 10}}});
+    add('G', 16, {{{14, 3}, {11, 0}, {5, 0}, {1, 4}, {0, 9},
+                   {1, 16}, {5, 20}, {11, 20}, {14, 17}, {14, 11}, {8, 11}}});
+    add('H', 15, {{{0, 0}, {0, 20}}, {{12, 0}, {12, 20}},
+                  {{0, 10}, {12, 10}}});
+    add('I', 9, {{{4, 0}, {4, 20}}});
+    add('J', 14, {{{11, 0}, {11, 15}, {9, 19}, {5, 20}, {1, 17}, {1, 14}}});
+    add('K', 15, {{{0, 0}, {0, 20}}, {{12, 0}, {0, 12}, {12, 20}}});
+    add('L', 14, {{{0, 0}, {0, 20}, {12, 20}}});
+    add('M', 18, {{{0, 20}, {0, 0}, {7, 11}, {14, 0}, {14, 20}}});
+    add('N', 16, {{{0, 20}, {0, 0}, {13, 20}, {13, 0}}});
+    add('O', 16, {{{5, 0}, {10, 0}, {14, 4}, {14, 16}, {10, 20},
+                   {5, 20}, {1, 16}, {1, 4}, {5, 0}}});
+    add('P', 15, {{{0, 20}, {0, 0}, {8, 0}, {12, 3}, {12, 7},
+                   {8, 10}, {0, 10}}});
+    add('Q', 17, {{{5, 0}, {10, 0}, {14, 4}, {14, 16}, {10, 20},
+                   {5, 20}, {1, 16}, {1, 4}, {5, 0}},
+                  {{9, 14}, {15, 21}}});
+    add('R', 15, {{{0, 20}, {0, 0}, {8, 0}, {12, 3}, {12, 7},
+                   {8, 10}, {0, 10}}, {{7, 10}, {13, 20}}});
+    add('S', 15, {{{12, 2}, {9, 0}, {4, 0}, {1, 3}, {1, 8},
+                   {4, 10}, {9, 10}, {12, 12}, {12, 17},
+                   {9, 20}, {3, 20}, {0, 18}}});
+    add('T', 15, {{{0, 0}, {12, 0}}, {{6, 0}, {6, 20}}});
+    add('U', 15, {{{0, 0}, {0, 15}, {2, 19}, {6, 20},
+                   {10, 19}, {12, 15}, {12, 0}}});
+    add('V', 15, {{{0, 0}, {6, 20}, {12, 0}}});
+    add('W', 20, {{{0, 0}, {3, 20}, {8, 9}, {13, 20}, {16, 0}}});
+    add('X', 15, {{{0, 0}, {12, 20}}, {{12, 0}, {0, 20}}});
+    add('Y', 15, {{{0, 0}, {6, 10}, {12, 0}}, {{6, 10}, {6, 20}}});
+    add('Z', 15, {{{0, 0}, {12, 0}, {0, 20}, {12, 20}}});
+}
+
 std::vector<std::uint32_t> DecodeUtf8(const std::string& text) {
     std::vector<std::uint32_t> codepoints;
     for (std::size_t i = 0; i < text.size();) {
@@ -104,6 +163,7 @@ std::unordered_map<std::uint32_t, HersheyGlyph> LoadFont() {
     const std::filesystem::path path = FindFontAsset();
     std::ifstream input(path, std::ios::binary);
     if (!input) {
+        AddBasicLatinGlyphs(glyphs);
         return glyphs;
     }
 
@@ -149,6 +209,7 @@ std::unordered_map<std::uint32_t, HersheyGlyph> LoadFont() {
             glyphs.emplace(codepoint, std::move(glyph));
         }
     }
+    AddBasicLatinGlyphs(glyphs);
     return glyphs;
 }
 
@@ -219,12 +280,11 @@ bool BuildHersheyTextUniformSeeds(
         return false;
     }
 
-    // Too few samples per stroke destroy recognisability for text with many
-    // strokes at a modest drone count. Uniform per-stroke sampling is only
-    // appropriate once every stroke can receive roughly four representatives.
-    // Returning false selects the corner/outline
-    // preserving low-density strategy in TextFormation.cpp.
-    if (requested_count < paths.size() * 4u) {
+    // If there are enough drones to represent every stroke, keep that
+    // topological guarantee even at low density.  Falling back to a global
+    // farthest-point selection here can spend all slots on long outer strokes
+    // and remove short dots, hooks, or cross bars altogether.
+    if (requested_count < paths.size()) {
         return false;
     }
 
@@ -291,8 +351,12 @@ bool BuildHersheyTextUniformSeeds(
     // gaps by SelectFarthestPointsWithAnchors.
     const double nominal_interval = total_length /
         static_cast<double>(requested_count) * kCoordinateScale;
+    // A pair substantially closer than the nominal along-stroke interval
+    // would otherwise become the global scale reference and enlarge every
+    // other gap in the word.  Merge such cross-stroke pairs and let the caller
+    // refill the released slots at the largest uncovered gaps.
     const double merge_distance_squared =
-        nominal_interval * nominal_interval * 0.30;
+        nominal_interval * nominal_interval;
     std::vector<RasterPoint> separated;
     separated.reserve(output.size());
     for (const RasterPoint& candidate : output) {
@@ -365,9 +429,12 @@ bool BuildHersheyTextCandidates(
                         continue;
                     }
                     const double cosine = (ax * bx + ay * by) / (a_length * b_length);
-                    // Preserve only a visually meaningful corner (roughly 25
-                    // degrees or sharper), not every control point on a curve.
-                    if (cosine < 0.906307787) {
+                    // Lock only a sharp direction change (roughly 60 degrees
+                    // or sharper). Gentle polyline bends remain available to
+                    // arc-length sampling; locking every font control point
+                    // creates clusters and makes one close pair scale the
+                    // entire formation.
+                    if (cosine < 0.5) {
                         append_anchor(stroke[i]);
                     }
                 }

@@ -60,8 +60,8 @@ HersheyFont.cpp
 - `spacing` 单位为米，表示相邻槽位的最小统一间距；
 - `formation_text` 使用 UTF-8；非空时优先于 `formation_id`；
 - `count` 最大为 4096；`formation_text` 最大为 16 个字符且不得超过 DDS 字段的 255 个 UTF-8 字节；
-- 基本中文优先使用 `assets/chinese-hershey-font/Heiti.hf.txt` 单线矢量黑体，槽位直接沿折线生成；英文或字库未覆盖字符回退到 Windows GDI 栅格化、粗网格降采样和中心骨架细化；
-- 槽位初选后执行多轮均匀松弛，减少笔画局部过密或过疏；输入相同，槽位数量、坐标和顺序必须完全一致；
+- 基本中文优先使用 `assets/chinese-hershey-font/Heiti.hf.txt` 单线矢量黑体；英文 `A-Z`（含小写映射）使用内置规则化单线笔画；数字、标点及其他未覆盖字符回退到 Windows GDI 栅格化、粗网格降采样和中心骨架细化；
+- 中文在无人机数量足以覆盖全部笔画时，先保证每条笔画至少有一个槽位，再按笔画弧长分配剩余槽位；笔画端点和尖锐转折点会吸附附近的均匀槽位，但吸附不得破坏安全间距，从而兼顾拐角清晰度与局部密度；交叉笔画的过近采样会合并并补入最大空缺，避免单个过近点对放大整幅文字；输入相同，槽位数量、坐标和顺序必须完全一致；
 - 中文单线字库来自 [LingDong-/chinese-hershey-font](https://github.com/LingDong-/chinese-hershey-font)，覆盖 20975 个基本 CJK 汉字，采用 MIT License；许可证副本位于字库目录。
 - 方阵最后一行从左向右填充，不单独居中；
 - 圆形 `N == 1` 时返回中心点；
