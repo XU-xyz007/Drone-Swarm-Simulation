@@ -1,8 +1,6 @@
 ﻿cmake_minimum_required(VERSION 3.20)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-set(CMAKE_PREFIX_PATH "E:/Qt_installer/6.5.3/msvc2019_64")
-
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
