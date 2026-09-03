@@ -45,6 +45,9 @@
     <ClCompile Include="..\Communication\DdsService.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="DroneApp.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\SharedMessage\gen_code\DroneMessage.h">
@@ -80,6 +83,7 @@
     <ClInclude Include="..\Algorithm\Formations\TextRasterizerWin.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="DroneApp.h">
     <ClInclude Include="..\Communication\DdsService.h">
       <Filter>头文件</Filter>
     </ClInclude>
