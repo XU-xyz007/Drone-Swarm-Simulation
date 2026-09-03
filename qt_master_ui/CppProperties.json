@@ -1,0 +1,25 @@
+{
+  "configurations": [
+    {
+      "inheritEnvironments": [
+        "msvc_x64"
+      ],
+      "name": "x64-Debug",
+      "includePath": [
+        "${env.INCLUDE}",
+        "${workspaceRoot}\\**",
+        "E:/Qt_installer/6.5.3/msvc2019_64/include",
+        "E:/Qt_installer/6.5.3/msvc2019_64/include/QtCore",
+        "E:/Qt_installer/6.5.3/msvc2019_64/include/QtGui",
+        "E:/Qt_installer/6.5.3/msvc2019_64/include/QtWidgets"
+      ],
+      "defines": [
+        "WIN32",
+        "_DEBUG",
+        "UNICODE",
+        "_UNICODE"
+      ],
+      "intelliSenseMode": "windows-msvc-x64"
+    }
+  ]
+}
