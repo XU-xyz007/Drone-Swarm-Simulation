@@ -84,6 +84,7 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="DroneApp.h">
+    <ClInclude Include="..\Communication\DdsService.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
