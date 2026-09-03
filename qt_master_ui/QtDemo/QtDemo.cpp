@@ -42,8 +42,9 @@ int main(int argc, char* argv[])
         static int frameCount = 0;
         if (++frameCount % 10 == 0) {
             auto progress = formationChecker.getProgress();
-            std::cout << "[状态] 在线: " << stateCache.getDroneCount()
-                      << " 架 | 队形进度: " << progress.first << "/" << progress.second
+            auto onlineCount = stateCache.getDroneCount();
+            std::cout << "[状态] 在线: " << onlineCount
+                      << " 架 | 队形进度: " << progress.first << "/" << onlineCount
                       << std::endl;
         }
     });

@@ -52,6 +52,8 @@ std::pair<size_t, size_t> FormationChecker::getProgress() const {
 
 void FormationChecker::reset() {
     std::lock_guard<std::mutex> lock(m_mutex);
+    m_expectedCount = 0;
+    m_latestCmdId = 0;
     m_droneCmdIds.clear();
     m_droneStatuses.clear();
 }

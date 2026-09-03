@@ -64,7 +64,7 @@ void TestStateReceiver::setDroneCount(uint32_t count) {
 
     if (count > oldDroneCount) {
         std::mt19937 rng(42 + static_cast<unsigned>(oldDroneCount));
-        std::uniform_real_distribution<double> distY(-80.0, 80.0);
+        std::uniform_real_distribution<double> distY(70.0, 130.0);
         for (uint32_t i = oldDroneCount; i < count; ++i) {
             m_x[i] = flyInStartX;
             m_y[i] = distY(rng);
@@ -74,12 +74,15 @@ void TestStateReceiver::setDroneCount(uint32_t count) {
                       << m_x[i] << "," << m_y[i] << ")" << std::endl;
         }
     } else if (count > oldUserCount) {
+        std::mt19937 rng(42 + static_cast<unsigned>(oldUserCount));
+        std::uniform_real_distribution<double> distY(70.0, 130.0);
         for (uint32_t i = oldUserCount; i < count; ++i) {
             m_flyOutDrone[i] = false;
             m_removed[i] = false;
             m_flyInDrone[i] = true;
             m_reached[i] = false;
             m_x[i] = flyInStartX;
+            m_y[i] = distY(rng);
             std::cout << "[Test] 无人机 " << (i + 1) << " 重新激活，从左侧飞入" << std::endl;
         }
     }
@@ -327,16 +330,6 @@ void TestStateReceiver::onTimerTick() {
 
     for (uint32_t i = 0; i < m_droneCount; ++i) {
         if (m_removed[i]) {
-            continue;
-        }
-
-        if (m_flyOutDrone[i] && m_x[i] >= flyOutEndX - 1.0) {
-            if (m_removeCallback) {
-                m_removeCallback(i + 1);
-            }
-            m_flyOutDrone[i] = false;
-            m_removed[i] = true;
-            std::cout << "[Test] 无人机 " << (i + 1) << " 已飞出画面" << std::endl;
             continue;
         }
 

@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.20)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 set(CMAKE_CXX_STANDARD 17)
@@ -39,6 +39,9 @@ add_executable(QtDemo
     "render/CoordinateMapper.cpp"
     "test/TestStateReceiver.h"
     "test/TestStateReceiver.cpp"
+    "test/StressTestReceiver.h"
+    "test/StressTestReceiver.cpp"
+    "test/TestPresets.h"
 )
 
 target_link_libraries(QtDemo

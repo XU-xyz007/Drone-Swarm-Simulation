@@ -13,6 +13,7 @@ void CoordinateMapper::autoFit(QGraphicsView* view,
 
     for (const auto& s : states) {
         if (s.transitioning) continue;
+        if (s.y <= 0.0) continue;
         if (first) {
             minX = s.x; maxX = s.x;
             minY = s.y; maxY = s.y;

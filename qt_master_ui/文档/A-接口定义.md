@@ -2,7 +2,7 @@
 
 > 组员 A（主控端 + 可视化大屏）全部接口定义
 >
-> 版本：v1.0 | 基于 IDL v1.4 冻结 | 最后更新：2026-08-31
+> 版本：v1.1 | 基于 IDL v1.4 冻结 | 最后更新：2026-09-03
 
 ---
 
@@ -68,6 +68,7 @@ struct DroneState {
     double       x;               // 当前 X 坐标（米）
     double       y;               // 当前 Y 坐标（米）
     uint32_t     current_cmd_id;  // 正在执行哪条命令（回执用）
+    bool         transitioning;   // 是否处于状态切换中（动画过渡用）
 };
 ```
 
@@ -78,6 +79,7 @@ struct DroneState {
 | `x` | `double` | 当前 X 坐标（米） | 决定画面中该点的横坐标 |
 | `y` | `double` | 当前 Y 坐标（米） | 决定画面中该点的纵坐标 |
 | `current_cmd_id` | `uint32_t` | 正在执行的命令号 | 用于"队形完成"判定 |
+| `transitioning` | `bool` | 是否处于状态切换中 | 动画过渡标志，默认 false |
 
 ---
 
@@ -138,19 +140,32 @@ public:
     virtual void setOnStateReceived(
         std::function<void(const DroneState&)> callback) = 0;
 
+    // 注册无人机移除回调（当无人机从列表中移除时触发）
+    virtual void setOnDroneRemoved(
+        std::function<void(uint32_t droneId)> callback) = 0;
+
     // 启动接收（开始监听 DDS 状态频道）
     virtual void start() = 0;
 
     // 停止接收
     virtual void stop() = 0;
+
+    // 设置最新的命令 ID（用于压力测试帧同步）
+    virtual void setLatestCmdId(uint32_t cmdId) = 0;
+
+    // 设置无人机数量
+    virtual void setDroneCount(uint32_t count) = 0;
 };
 ```
 
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
 | `setOnStateReceived` | `std::function<void(const DroneState&)>` | `void` | 注册回调，每次收到状态时触发 |
+| `setOnDroneRemoved` | `std::function<void(uint32_t)>` | `void` | 注册回调，无人机被移除时触发 |
 | `start` | 无 | `void` | 开始监听状态频道 |
 | `stop` | 无 | `void` | 停止监听 |
+| `setLatestCmdId` | `uint32_t cmdId` | `void` | 同步最新命令 ID |
+| `setDroneCount` | `uint32_t count` | `void` | 设置无人机数量 |
 
 **Fake 实现行为**：`start` 启动一个 Qt 定时器，每 100ms 生成 N 个假 `DroneState`（坐标随机游走、状态循环切换），调用 callback。
 
@@ -206,6 +221,9 @@ public:
     // 更新一架无人机的 current_cmd_id（由状态回调触发）
     virtual void updateDroneCmdId(uint32_t droneId, uint32_t currentCmdId) = 0;
 
+    // 更新一架无人机的状态（由状态回调触发，用于统计就位数量）
+    virtual void updateDroneStatus(uint32_t droneId, DroneStatus status) = 0;
+
     // 检查是否队形完成（全部 N 架无人机都回执了最新 cmd_id）
     virtual bool isFormationComplete() const = 0;
 
@@ -222,6 +240,7 @@ public:
 | `setExpectedCount` | `uint32_t count` | `void` | 设置预期无人机数量 N |
 | `setLatestCmdId` | `uint32_t cmdId` | `void` | 每次发命令后更新 |
 | `updateDroneCmdId` | `uint32_t droneId, uint32_t currentCmdId` | `void` | 收到状态时更新 |
+| `updateDroneStatus` | `uint32_t droneId, DroneStatus status` | `void` | 收到状态时更新（统计就位） |
 | `isFormationComplete` | 无 | `bool` | 全部完成返回 true |
 | `getProgress` | 无 | `pair<size_t,size_t>` | (已完成, 总数) |
 | `reset` | 无 | `void` | 重置检查器 |
@@ -235,13 +254,13 @@ public:
 ```cpp
 // 7 种状态 → 7 种颜色
 struct ColorConfig {
-    static constexpr QColor ST_IDLE_COLOR    = QColor(128, 128, 128);  // 灰色
-    static constexpr QColor ST_TAKEOFF_COLOR = QColor(255, 255, 0);    // 黄色
-    static constexpr QColor ST_CRUISE_COLOR  = QColor(0, 200, 0);      // 绿色
-    static constexpr QColor ST_LANDING_COLOR = QColor(0, 100, 255);    // 蓝色
-    static constexpr QColor ST_LANDED_COLOR  = QColor(80, 80, 80);     // 深灰
-    static constexpr QColor ST_FAULT_COLOR   = QColor(255, 0, 0);      // 红色
-    static constexpr QColor ST_LOST_COLOR    = QColor(0, 0, 0);        // 黑色
+    static constexpr QColor ST_IDLE_COLOR    = QColor(76, 175, 80);   // 绿色（待命）
+    static constexpr QColor ST_TAKEOFF_COLOR = QColor(33, 150, 243);  // 蓝色（起飞中）
+    static constexpr QColor ST_CRUISE_COLOR  = QColor(255, 235, 59);  // 黄色（巡航中）
+    static constexpr QColor ST_LANDING_COLOR = QColor(255, 152, 0);   // 橙色（降落中）
+    static constexpr QColor ST_LANDED_COLOR  = QColor(158, 158, 158); // 灰色（已落地）
+    static constexpr QColor ST_FAULT_COLOR   = QColor(244, 67, 54);   // 红色（故障）
+    static constexpr QColor ST_LOST_COLOR    = QColor(96, 125, 139);  // 蓝灰（失联）
 
     static QColor getColor(DroneStatus status) {
         switch (status) {
@@ -447,6 +466,10 @@ A_MainControl/
 │   ├── DroneItem.h / .cpp            // 单个无人机图形项
 │   ├── ColorConfig.h                 // 颜色映射表
 │   └── CoordinateMapper.h / .cpp     // 坐标映射器
+├── test/
+│   ├── TestStateReceiver.h / .cpp     // 测试模式：固定队形状态生成器
+│   ├── StressTestReceiver.h / .cpp    // 压力测试：大规模无人机状态生成器
+│   └── TestPresets.h                  // 压力测试预设参数
 └── real/
     ├── RealCommandSender.h / .cpp    // D 封装库命令发送器（待 D 交付后实现）
     └── RealStateReceiver.h / .cpp    // D 封装库状态接收器（待 D 交付后实现）
@@ -469,8 +492,10 @@ A_MainControl/
 | `ColorConfig` | 工具类 | ✅ 已定义 | 无 |
 | `DroneItem` | 渲染类 | ✅ 已定义 | Qt |
 | `CoordinateMapper` | 工具类 | ✅ 已定义 | 无 |
-| `FakeCommandSender` | 假实现 | ⏳ 待实现 | 无 |
-| `FakeStateReceiver` | 假实现 | ⏳ 待实现 | Qt |
+| `FakeCommandSender` | 假实现 | ✅ 已实现 | 无 |
+| `FakeStateReceiver` | 假实现 | ✅ 已实现 | Qt |
+| `TestStateReceiver` | 测试实现 | ✅ 已实现 | Qt |
+| `StressTestReceiver` | 压力测试实现 | ✅ 已实现 | Qt |
 | `RealCommandSender` | 真实现 | 🔒 等待 D 封装库 | D 的 DDS 封装库 |
 | `RealStateReceiver` | 真实现 | 🔒 等待 D 封装库 | D 的 DDS 封装库 |
 | `FormationTable`（B 提供） | 外部依赖 | 🔒 等待 B 交付 | B 的队形算法库 |

@@ -9,6 +9,8 @@
 #include "render/ColorConfig.h"
 #include "render/CoordinateMapper.h"
 #include "test/TestStateReceiver.h"
+#include "test/StressTestReceiver.h"
+#include "test/TestPresets.h"
 #include <QHBoxLayout>
 #include <QMessageBox>
 #include <QVBoxLayout>
@@ -44,6 +46,16 @@ MainWindow::MainWindow(ICommandSender* cmdSender,
         m_stateCache->removeState(droneId);
     });
 
+    m_stressReceiver = new StressTestReceiver(this);
+    m_stressReceiver->setOnStateReceived([this](const DroneState& state) {
+        m_stateCache->updateState(state);
+        m_formationChecker->updateDroneCmdId(state.drone_id, state.current_cmd_id);
+        m_formationChecker->updateDroneStatus(state.drone_id, state.status);
+    });
+    m_stressReceiver->setOnDroneRemoved([this](uint32_t droneId) {
+        m_stateCache->removeState(droneId);
+    });
+
     m_coordMapper = new CoordinateMapper();
 
     setupUi();
@@ -56,6 +68,14 @@ MainWindow::MainWindow(ICommandSender* cmdSender,
     m_renderTimer = new QTimer(this);
     connect(m_renderTimer, &QTimer::timeout, this, &MainWindow::onRenderTick);
     m_renderTimer->start(50);
+
+    m_stressStatsTimer = new QTimer(this);
+    connect(m_stressStatsTimer, &QTimer::timeout, this, &MainWindow::updateStressStats);
+    m_stressStatsTimer->start(1000);
+}
+
+MainWindow::~MainWindow() {
+    m_droneItems.clear();
 }
 
 void MainWindow::setupUi() {
@@ -75,6 +95,7 @@ void MainWindow::setupUi() {
     leftLayout->addWidget(leftPanel->findChild<QGroupBox*>("paramGroup"));
 
     setupButtons(leftPanel);
+    setupStressTestPanel(leftPanel);
     leftLayout->addStretch();
 
     mainLayout->addWidget(leftPanel);
@@ -132,7 +153,7 @@ void MainWindow::setupParameterPanel(QWidget* panel) {
 
     m_spinCenterY = new QDoubleSpinBox();
     m_spinCenterY->setRange(-1000.0, 1000.0);
-    m_spinCenterY->setValue(0.0);
+    m_spinCenterY->setValue(100.0);
     m_spinCenterY->setDecimals(1);
     m_spinCenterY->setSuffix(" m");
     form->addRow("中心 Y:", m_spinCenterY);
@@ -210,11 +231,34 @@ void MainWindow::setupStatusBar() {
 }
 
 void MainWindow::onTakeoff() {
+    int formationIdx = m_comboFormation->currentIndex();
     DroneCmd cmd;
     cmd.cmd_id = m_cmdSender->getLastCmdId() + 1;
     cmd.cmd_type = DroneCmdType::CMD_TAKEOFF;
+    cmd.target_x = m_spinCenterX->value();
+    cmd.target_y = m_spinCenterY->value();
+    cmd.spacing = m_spinSpacing->value();
     cmd.expected_count = static_cast<uint32_t>(m_spinN->value());
+
+    if (formationIdx == 6) {
+        QString text = m_editFormationText->text().trimmed().toUpper();
+        if (text == "D") {
+            cmd.formation_id = 4;
+        } else if (text == "S") {
+            cmd.formation_id = 5;
+        } else {
+            cmd.formation_id = 0;
+        }
+    } else {
+        cmd.formation_id = static_cast<uint32_t>(formationIdx);
+    }
+
     m_cmdSender->sendCommand(cmd);
+
+    m_formationChecker->setLatestCmdId(cmd.cmd_id);
+    m_stateReceiver->setLatestCmdId(cmd.cmd_id);
+    m_testReceiver->setLatestCmdId(cmd.cmd_id);
+
     statusBar()->showMessage("已发送起飞命令");
     std::cout << "========== 起飞 ==========" << std::endl;
 }
@@ -272,6 +316,11 @@ void MainWindow::onLand() {
     cmd.cmd_type = DroneCmdType::CMD_LAND;
     cmd.expected_count = static_cast<uint32_t>(m_spinN->value());
     m_cmdSender->sendCommand(cmd);
+
+    m_formationChecker->setLatestCmdId(cmd.cmd_id);
+    m_stateReceiver->setLatestCmdId(cmd.cmd_id);
+    m_testReceiver->setLatestCmdId(cmd.cmd_id);
+
     statusBar()->showMessage("已发送降落命令");
     std::cout << "========== 降落 ==========" << std::endl;
 }
@@ -282,6 +331,11 @@ void MainWindow::onEmergency() {
     cmd.cmd_type = DroneCmdType::CMD_EMERGENCY;
     cmd.expected_count = static_cast<uint32_t>(m_spinN->value());
     m_cmdSender->sendCommand(cmd);
+
+    m_formationChecker->setLatestCmdId(cmd.cmd_id);
+    m_stateReceiver->setLatestCmdId(cmd.cmd_id);
+    m_testReceiver->setLatestCmdId(cmd.cmd_id);
+
     statusBar()->showMessage("已发送急停命令");
     std::cout << "========== 急停 ==========" << std::endl;
 }
@@ -304,7 +358,7 @@ void MainWindow::onTestModeToggled(bool checked) {
 
 void MainWindow::onCompletionCheck() {
     auto progress = m_formationChecker->getProgress();
-    uint32_t totalCount = static_cast<uint32_t>(m_spinN->value());
+    uint32_t totalCount = static_cast<uint32_t>(progress.second);
 
     if (!m_formationCompleted) {
         statusBar()->showMessage(QString::fromStdString(
@@ -337,6 +391,8 @@ void MainWindow::updateDroneDisplay() {
     std::unordered_set<uint32_t> activeIds;
 
     for (const auto& state : states) {
+        if (state.y <= 0.0) continue;
+
         activeIds.insert(state.drone_id);
 
         auto it = m_droneItems.find(state.drone_id);
@@ -358,6 +414,110 @@ void MainWindow::updateDroneDisplay() {
             ++it;
         }
     }
+}
+
+void MainWindow::setupStressTestPanel(QWidget* container) {
+    QGroupBox* group = new QGroupBox("压力测试", container);
+    group->setObjectName("stressGroup");
+    QVBoxLayout* layout = new QVBoxLayout(group);
+
+    m_comboStressPreset = new QComboBox();
+    m_comboStressPreset->setToolTip("选择压力测试预设场景");
+    auto presets = StressPreset::all();
+    for (size_t i = 0; i < presets.size(); ++i) {
+        m_comboStressPreset->addItem(QString::fromStdString(presets[i].name));
+    }
+    layout->addWidget(new QLabel("测试场景:"));
+    layout->addWidget(m_comboStressPreset);
+
+    m_lblStressStats = new QLabel("未启动");
+    m_lblStressStats->setWordWrap(true);
+    m_lblStressStats->setStyleSheet("QLabel{color:#888;font-size:11px;}");
+    layout->addWidget(m_lblStressStats);
+
+    connect(m_comboStressPreset, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &MainWindow::onStressPresetChanged);
+
+    QVBoxLayout* containerLayout = qobject_cast<QVBoxLayout*>(container->layout());
+    if (containerLayout) {
+        containerLayout->addWidget(group);
+    }
+}
+
+void MainWindow::onStressPresetChanged(int index) {
+    if (index < 0) return;
+    auto presets = StressPreset::all();
+    if (static_cast<size_t>(index) >= presets.size()) return;
+
+    const StressPreset& preset = presets[index];
+
+    m_fakeReceiver->stop();
+    m_testReceiver->stop();
+    m_stateCache->clear();
+
+    m_coordMapper->reset();
+    m_formationChecker->reset();
+    m_formationChecker->setExpectedCount(preset.droneCount);
+    m_formationChecker->setLatestCmdId(1);
+    m_formationCompleted = false;
+
+    m_stressReceiver->setPreset(preset);
+    m_stressReceiver->start();
+    m_stateReceiver = m_stressReceiver;
+
+    m_spinN->blockSignals(true);
+    m_spinN->setValue(static_cast<int>(preset.droneCount));
+    m_spinN->blockSignals(false);
+
+    m_chkTestMode->blockSignals(true);
+    m_chkTestMode->setChecked(false);
+    m_chkTestMode->blockSignals(false);
+
+    statusBar()->showMessage(QString::fromStdString(
+        "压力测试: " + preset.name + " | " + preset.description));
+    std::cout << "========== 压力测试: " << preset.name << " ==========" << std::endl;
+    std::cout << "[StressTest] " << preset.description << std::endl;
+}
+
+void MainWindow::updateStressStats() {
+    if (m_stateReceiver != m_stressReceiver) {
+        m_lblStressStats->setText("未启动");
+        return;
+    }
+    if (!m_stressReceiver->currentPreset()) {
+        m_lblStressStats->setText("未启动");
+        return;
+    }
+
+    QString text;
+    double targetHz = static_cast<double>(m_stressReceiver->currentPreset()->updateHz);
+    double actualFps = m_stressReceiver->currentFps();
+    bool fpsReady = (actualFps >= 0.0);
+    bool isHealthy = fpsReady && (actualFps >= targetHz * 0.8);
+
+    std::cout << "[StressStats] targetHz=" << targetHz
+              << " actualFps=" << actualFps
+              << " fpsReady=" << fpsReady
+              << " isHealthy=" << isHealthy << std::endl;
+
+    text += QString("场景: %1\n")
+        .arg(QString::fromStdString(m_stressReceiver->currentPreset()->name));
+    text += QString("无人机: %1 架\n")
+        .arg(m_stressReceiver->currentPreset()->droneCount);
+    text += QString("目标频率: %1 Hz\n")
+        .arg(targetHz, 0, 'f', 0);
+    text += QString("实际速率: %1\n")
+        .arg(fpsReady ? QString::number(actualFps, 'f', 1) + " Hz" : "计算中...");
+    text += QString("消息总数: %1\n")
+        .arg(m_stressReceiver->messageCount());
+    text += QString("状态: %1")
+        .arg(!fpsReady ? "计算中..." : (isHealthy ? "正常" : "过载"));
+
+    m_lblStressStats->setText(text);
+    m_lblStressStats->setStyleSheet(
+        !fpsReady ? "QLabel{color:#888;font-size:11px;}" :
+        (isHealthy ? "QLabel{color:#4CAF50;font-size:11px;}" :
+                     "QLabel{color:#F44336;font-size:11px;}"));
 }
 
 bool MainWindow::eventFilter(QObject* obj, QEvent* event) {

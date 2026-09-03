@@ -50,18 +50,20 @@ void FakeStateReceiver::setDroneCount(uint32_t count) {
     m_removed.resize(count, false);
 
     if (count > oldDroneCount) {
-        std::uniform_real_distribution<double> distY(-30.0, 30.0);
+        std::uniform_real_distribution<double> distY(70.0, 130.0);
         for (uint32_t i = oldDroneCount; i < count; ++i) {
             m_x[i] = -FLY_IN_OFFSET;
             m_y[i] = distY(m_rng);
             m_flyInDrone[i] = true;
         }
     } else if (count > oldUserCount) {
+        std::uniform_real_distribution<double> distY(70.0, 130.0);
         for (uint32_t i = oldUserCount; i < count; ++i) {
             m_flyOutDrone[i] = false;
             m_removed[i] = false;
             m_flyInDrone[i] = true;
             m_x[i] = -FLY_IN_OFFSET;
+            m_y[i] = distY(m_rng);
         }
     }
 }
@@ -143,15 +145,6 @@ void FakeStateReceiver::onTimerTick() {
 
     for (uint32_t i = 0; i < m_droneCount; ++i) {
         if (m_removed[i]) {
-            continue;
-        }
-
-        if (m_flyOutDrone[i] && m_x[i] >= flyOutEndX - 1.0) {
-            if (m_removeCallback) {
-                m_removeCallback(i + 1);
-            }
-            m_flyOutDrone[i] = false;
-            m_removed[i] = true;
             continue;
         }
 

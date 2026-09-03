@@ -2,7 +2,7 @@
 
 > 组员 A（主控端 + 可视化大屏）完成状态追踪
 >
-> 版本：v1.10 | 创建：2026-08-31 | 最后更新：2026-09-01（无人机增减动画 + 画面缩放拖拽）
+> 版本：v1.12 | 创建：2026-08-31 | 最后更新：2026-09-03（全代码审查 + Bug 修复 + 文档同步 + 双重删除修复 + 死代码清理 + 起飞队形信息）
 
 ---
 
@@ -67,8 +67,8 @@
 
 | 类 | 文件位置 | 完成日期 |
 |------|----------|----------|
-| DroneStateCache | core/DroneStateCache.h/.cpp | 2026-08-31 |
-| FormationChecker | core/FormationChecker.h/.cpp | 2026-08-31 |
+| DroneStateCache | core/DroneStateCache.h/.cpp | 2026-08-31 | 2026-09-02 加 mutex 修复数据竞争 |
+| FormationChecker | core/FormationChecker.h/.cpp | 2026-08-31 | 2026-09-02 加 mutex 修复数据竞争 |
 
 ### 1.4 Fake 实现（步骤 4）
 
@@ -90,6 +90,14 @@
 | ColorConfig | render/ColorConfig.h | 2026-08-31 |
 | DroneItem | render/DroneItem.h/.cpp | 2026-08-31 |
 | CoordinateMapper | render/CoordinateMapper.h/.cpp | 2026-08-31 | 2026-09-01 排除 transitioning + resetView |
+
+### 1.7 测试模块（步骤 8.5 补充）
+
+| 类 | 文件位置 | 完成日期 |
+|------|----------|----------|
+| TestStateReceiver | test/TestStateReceiver.h/.cpp | 2026-08-31 |
+| StressTestReceiver | test/StressTestReceiver.h/.cpp | 2026-09-02 |
+| TestPresets | test/TestPresets.h | 2026-09-02 | 15 个压力测试预设场景 |
 
 ---
 
@@ -151,6 +159,9 @@
 | docs/interface/06-A界面交互.md | 8 | 2026-08-31 |
 | test/TestStateReceiver.h | 测试 | 2026-08-31 |
 | test/TestStateReceiver.cpp | 测试 | 2026-08-31 |
+| test/StressTestReceiver.h | 测试 | 2026-09-02 |
+| test/StressTestReceiver.cpp | 测试 | 2026-09-02 |
+| test/TestPresets.h | 测试 | 2026-09-02 |
 
 ### 4.2 计划创建的文件
 
@@ -187,6 +198,22 @@
 | 2026-09-01 | 修复队形到达需多次点击 Bug：applySeparation 跳过已到达和近目标无人机 |
 | 2026-09-01 | 画面交互：鼠标滚轮缩放 + 拖拽平移 + 双击重置视图适配 |
 | 2026-09-01 | 修复缩放/拖拽与 autoFit 冲突：autoFit 仅首次 fitInView，后续只扩展 sceneRect |
+| 2026-09-02 | DroneStateCache 加 mutex 修复数据竞争（线程安全） |
+| 2026-09-02 | FormationChecker 加 mutex 修复数据竞争（线程安全） |
+| 2026-09-02 | FormationChecker 就位计数改为实时统计当前 ST_IDLE 数量 |
+| 2026-09-02 | 压力测试模块：StressTestReceiver + TestPresets（15个预设场景） |
+| 2026-09-02 | 测试说明文档：docs/测试说明.md |
+| 2026-09-03 | Bug 修复：onTakeoff/onLand/onEmergency 缺少 setLatestCmdId → FormationChecker 进度条卡死 |
+| 2026-09-03 | Bug 修复：onTakeoff 中 setExpectedCount 导致起飞后误报"队形完成" → 移除 |
+| 2026-09-03 | Bug 修复：onStressPresetChanged 未通知 FormationChecker → 进度条显示 X/0 |
+| 2026-09-03 | Bug 修复：onCompletionCheck 中 totalCount 来源不一致（UI旋钮 vs Checker） → 统一用 progress.second |
+| 2026-09-03 | Bug 修复：StressTestReceiver setPreset 中 m_timer->stop() 确保定时器重启 |
+| 2026-09-03 | 改进：MainWindow 析构函数显式清理 m_droneItems，避免悬空指针 |
+| 2026-09-03 | 文档同步：A-接口定义.md 更新 DroneState/IStateReceiver/IFormationChecker/ColorConfig/文件结构 |
+| 2026-09-03 | Bug 修复（严重）：MainWindow 析构函数双重删除 DroneItem（QGraphicsScene 已删除） |
+| 2026-09-03 | 代码清理：移除 FakeStateReceiver/TestStateReceiver 中死代码（不可达 fly-out 检查） |
+| 2026-09-03 | 改进：FormationChecker::reset() 同时重置 m_expectedCount 和 m_latestCmdId |
+| 2026-09-03 | 改进：onTakeoff() 补充 formation_id 等队形信息（符合需求文档） |
 
 ---
 
@@ -210,6 +237,9 @@
 | 2026-09-01 | Bug 修复：m_userCount 分离解决减少不生效 + 多次增减数量不符 |
 | 2026-09-01 | Bug 修复：applySeparation 跳过已到达/近目标无人机，解决队形到达需多次点击 |
 | 2026-09-01 | 画面交互：滚轮缩放 + 拖拽平移 + 双击重置 + autoFit 冲突修复 |
+| 2026-09-02 | 线程安全：DroneStateCache + FormationChecker 加 mutex，修复数据竞争 |
+| 2026-09-02 | UI 修复：就位计数实时统计 ST_IDLE，进度总数实时读取 N 旋钮值 |
+| 2026-09-02 | 压力测试：StressTestReceiver + 15 个预设场景 + 测试说明文档 |
 
 ---
 

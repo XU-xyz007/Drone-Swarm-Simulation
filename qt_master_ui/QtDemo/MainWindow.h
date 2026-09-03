@@ -24,6 +24,8 @@ class IFormationChecker;
 class DroneItem;
 class CoordinateMapper;
 class TestStateReceiver;
+class StressTestReceiver;
+struct StressPreset;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -34,7 +36,7 @@ public:
                         IDroneStateCache* stateCache,
                         IFormationChecker* formationChecker,
                         QWidget* parent = nullptr);
-    ~MainWindow() override = default;
+    ~MainWindow() override;
 
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
@@ -47,19 +49,23 @@ private slots:
     void onCompletionCheck();
     void onRenderTick();
     void onTestModeToggled(bool checked);
+    void onStressPresetChanged(int index);
 
 private:
     void setupUi();
     void setupParameterPanel(QWidget* panel);
     void setupCanvas();
     void setupButtons(QWidget* container);
+    void setupStressTestPanel(QWidget* container);
     void setupStatusBar();
     void updateDroneDisplay();
+    void updateStressStats();
 
     ICommandSender*    m_cmdSender;
     IStateReceiver*    m_stateReceiver;
-    IStateReceiver*    m_fakeReceiver = nullptr;   // 原始 Fake 接收器
-    TestStateReceiver* m_testReceiver = nullptr;   // 测试模式接收器
+    IStateReceiver*    m_fakeReceiver = nullptr;
+    TestStateReceiver* m_testReceiver = nullptr;
+    StressTestReceiver* m_stressReceiver = nullptr;
     IDroneStateCache*  m_stateCache;
     IFormationChecker* m_formationChecker;
 
@@ -80,10 +86,14 @@ private:
 
     QCheckBox* m_chkTestMode;
 
+    QComboBox* m_comboStressPreset;
+    QLabel* m_lblStressStats;
+
     CoordinateMapper* m_coordMapper;
 
     QTimer* m_completionTimer;
     QTimer* m_renderTimer;
+    QTimer* m_stressStatsTimer;
 
     std::unordered_map<uint32_t, DroneItem*> m_droneItems;
     bool m_formationCompleted = false;
