@@ -80,5 +80,8 @@
     <ClInclude Include="..\Algorithm\Formations\TextRasterizerWin.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="..\Communication\DdsService.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

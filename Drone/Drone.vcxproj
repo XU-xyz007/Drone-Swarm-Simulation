@@ -23,26 +23,26 @@
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{4fe24250-6dac-4c91-a2ff-65b3dae21ef3}</ProjectGuid>
     <RootNamespace>Drone</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
     <OutDir>$(ProjectDir)..\x64\$(Configuration)\$(ProjectName)\</OutDir>
     <IntDir>$(ProjectDir)x64\$(Configuration)\</IntDir>
@@ -50,7 +50,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -105,6 +105,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;_ZRDDSDLLIMPORT;_ZRDDSCPPINTERFACE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(ZRDDS_HOME)\include\ZRDDSCoreInterface;$(ZRDDS_HOME)\include\CPlusPlusInterface;$(ProjectDir)..\SharedMessage\gen_code;$(SolutionDir)Algorithm\include;$(SolutionDir)Algorithm\Formations;$(SolutionDir)Algorithm\Math;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -113,8 +114,8 @@
       <AdditionalDependencies>ZRDDSCppd_VS2015.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>copy /Y &quot;$(ProjectDir)..\ZRDDS_QOS_PROFILES.xml&quot; &quot;$(OutDir)&quot;
-copy /Y &quot;$(ZRDDS_HOME)\lib\ZRDDSCppd_VS2015.dll&quot; &quot;$(OutDir)&quot;</Command>
+      <Command>copy /Y "$(ProjectDir)..\ZRDDS_QOS_PROFILES.xml" "$(OutDir)"
+copy /Y "$(ZRDDS_HOME)\lib\ZRDDSCppd_VS2015.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
