@@ -136,9 +136,10 @@
     <ClCompile Include="..\Algorithm\Formations\PresetFormations.cpp" />
     <ClCompile Include="..\Algorithm\Formations\TextFormation.cpp" />
     <ClCompile Include="..\Algorithm\Formations\TextRasterizerWin.cpp" />
+    <ClCompile Include="..\Communication\DdsService.cpp" />
     <ClCompile Include="..\SharedMessage\gen_code\DroneMessage.cpp" />
     <ClCompile Include="..\SharedMessage\gen_code\DroneMessageTypeSupport.cpp" />
-    <ClCompile Include="mian.cpp" />
+    <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Algorithm\include\FormationAlgorithm.h" />
