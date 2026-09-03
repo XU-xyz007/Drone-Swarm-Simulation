@@ -396,6 +396,10 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+# =========================
+# Custom / ZR-DDS Configs
+# =========================
+*.ddslog
 
 # JetBrains Rider
 *.sln.iml
