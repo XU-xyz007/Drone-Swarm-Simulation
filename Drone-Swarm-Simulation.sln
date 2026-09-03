@@ -7,6 +7,10 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Controller", "Controller\Co
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Drone", "Drone\Drone.vcxproj", "{4FE24250-6DAC-4C91-A2FF-65B3DAE21EF3}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FormationAlgorithmTests", "Algorithm\Tests\FormationAlgorithmTests.vcxproj", "{A3B97DD7-530A-4D88-AD6A-55F94CDCF0BD}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FormationPreview", "Algorithm\tools\FormationPreview.vcxproj", "{D866DBBD-620D-4AE0-B443-FF5C6F3CD11F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -31,6 +35,18 @@ Global
 		{4FE24250-6DAC-4C91-A2FF-65B3DAE21EF3}.Release|x64.Build.0 = Release|x64
 		{4FE24250-6DAC-4C91-A2FF-65B3DAE21EF3}.Release|x86.ActiveCfg = Release|Win32
 		{4FE24250-6DAC-4C91-A2FF-65B3DAE21EF3}.Release|x86.Build.0 = Release|Win32
+		{A3B97DD7-530A-4D88-AD6A-55F94CDCF0BD}.Debug|x64.ActiveCfg = Debug|x64
+		{A3B97DD7-530A-4D88-AD6A-55F94CDCF0BD}.Debug|x64.Build.0 = Debug|x64
+		{A3B97DD7-530A-4D88-AD6A-55F94CDCF0BD}.Debug|x86.ActiveCfg = Debug|x64
+		{A3B97DD7-530A-4D88-AD6A-55F94CDCF0BD}.Release|x64.ActiveCfg = Release|x64
+		{A3B97DD7-530A-4D88-AD6A-55F94CDCF0BD}.Release|x64.Build.0 = Release|x64
+		{A3B97DD7-530A-4D88-AD6A-55F94CDCF0BD}.Release|x86.ActiveCfg = Release|x64
+		{D866DBBD-620D-4AE0-B443-FF5C6F3CD11F}.Debug|x64.ActiveCfg = Debug|x64
+		{D866DBBD-620D-4AE0-B443-FF5C6F3CD11F}.Debug|x64.Build.0 = Debug|x64
+		{D866DBBD-620D-4AE0-B443-FF5C6F3CD11F}.Debug|x86.ActiveCfg = Debug|x64
+		{D866DBBD-620D-4AE0-B443-FF5C6F3CD11F}.Release|x64.ActiveCfg = Release|x64
+		{D866DBBD-620D-4AE0-B443-FF5C6F3CD11F}.Release|x64.Build.0 = Release|x64
+		{D866DBBD-620D-4AE0-B443-FF5C6F3CD11F}.Release|x86.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
