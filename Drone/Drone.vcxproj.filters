@@ -15,13 +15,34 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="mian.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="..\SharedMessage\gen_code\DroneMessage.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="..\SharedMessage\gen_code\DroneMessageTypeSupport.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Algorithm\FormationAlgorithm.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Algorithm\Math\GeometryUtils.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Algorithm\Formations\HersheyFont.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Algorithm\Formations\PresetFormations.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Algorithm\Formations\TextFormation.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Algorithm\Formations\TextRasterizerWin.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="main.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Communication\DdsService.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
@@ -36,6 +57,27 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="..\SharedMessage\gen_code\DroneMessageTypeSupport.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Algorithm\include\FormationAlgorithm.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Algorithm\include\FormationTypes.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Algorithm\Math\GeometryUtils.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Algorithm\Formations\HersheyFont.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Algorithm\Formations\PresetFormations.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Algorithm\Formations\TextFormation.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Algorithm\Formations\TextRasterizerWin.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
