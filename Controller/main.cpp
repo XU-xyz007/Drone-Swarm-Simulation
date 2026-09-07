@@ -3,6 +3,7 @@
 #include <QFileInfo>
 #include <QMetaObject>
 #include <iostream>
+#include <cstring>
 #include <windows.h>
 
 
@@ -25,7 +26,8 @@ public:
     bool sendCommand(const DroneCmd& cmd) override {
         m_lastCmdId = cmd.cmd_id;
 
-        SharedMessage::DroneCmd ddsCmd = {}; // 全零初始化，指针默认NULL
+        SharedMessage::DroneCmd ddsCmd;
+        SharedMessage::DroneCmdInitialize(&ddsCmd);
         ddsCmd.cmd_id = cmd.cmd_id;
         ddsCmd.cmd_type = static_cast<SharedMessage::DroneCmdType>(cmd.cmd_type);
         ddsCmd.target_x = cmd.target_x;
@@ -33,7 +35,11 @@ public:
         ddsCmd.spacing = cmd.spacing;
         ddsCmd.formation_id = cmd.formation_id;
         ddsCmd.expected_count = cmd.expected_count;
-        ddsCmd.formation_text = const_cast<DDS_Char*>(""); // 强制空字符串
+
+        if (!cmd.formation_text.empty()) {
+            strncpy(ddsCmd.formation_text, cmd.formation_text.c_str(), 255);
+            ddsCmd.formation_text[255] = '\0';
+        }
 
         bool ret = SwarmComm::PublishCmd(ddsCmd);
         if (!ret) {
@@ -139,7 +145,11 @@ int main(int argc, char* argv[]) {
 
     // ========== 新增这一行：把状态接收器和状态缓存打通 ==========
     realStateReceiver.setOnStateReceived(
-        std::bind(&DroneStateCache::updateState, &stateCache, std::placeholders::_1)
+        [&](const DroneState& state) {
+            stateCache.updateState(state);
+            formationChecker.updateDroneCmdId(state.drone_id, state.current_cmd_id);
+            formationChecker.updateDroneStatus(state.drone_id, state.status);
+        }
     );
 
     MainWindow w(&realCmdSender, &realStateReceiver, &stateCache, &formationChecker);
