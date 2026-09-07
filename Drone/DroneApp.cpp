@@ -85,7 +85,7 @@ void DroneApp::OnCommandReceived(const SharedMessage::DroneCmd& cmd) {
 void DroneApp::RunLoop() {
     const double dt = 0.1;
     const double arrive_threshold = 0.05;
-    const double max_speed = 2.0;
+    const double max_speed = 15.0;
     int hover_tick_counter = 0;
 
     while (running_) {
@@ -154,5 +154,16 @@ void DroneApp::PublishCurrentState() {
         state.status = is_moving_ ? SharedMessage::ST_CRUISE : current_status_;
     }
 
-    SwarmComm::PublishState(state);
+    bool ok = SwarmComm::PublishState(state);
+    if (!ok) {
+        std::cerr << "[网络警告] 无人机 #" << state.drone_id << " 状态包发送失败！" << std::endl;
+    }
+}
+
+void DroneApp::PrintDebugStatus() {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    std::cout << "  -> 无人机 #" << drone_id_
+        << " | 当前坐标: (" << cur_x_ << ", " << cur_y_ << ")"
+        << " | 目标槽位: (" << target_x_ << ", " << target_y_ << ")"
+        << " | 状态码: " << current_status_ << std::endl;
 }

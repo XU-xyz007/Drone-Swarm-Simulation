@@ -396,6 +396,7 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
 # =========================
 # Custom / ZR-DDS Configs
 # =========================
@@ -403,3 +404,35 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# =========================
+# Qt 自动生成文件（VS + Qt 插件）
+# =========================
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+*.moc
+*.qtvscr
+*.qmlc
+*.jsc
+Makefile*
+*_plugin_import.cpp
+
+# Qt Creator 本地配置（如果有人用 Qt Creator 打开）
+*.pro.user
+*.pro.user.*
+*.qbs.user
+*.qbs.user.*
+*.config
+
+# CMake 生成目录（qt_master_ui 下的 CMake 构建）
+qt_master_ui/build/
+qt_master_ui/out/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+CMakeUserPresets.json

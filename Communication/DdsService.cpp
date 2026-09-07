@@ -48,6 +48,9 @@ class StateReaderListener : public SimpleDataReaderListener<SharedMessage::Drone
 public:
     void on_process_sample(DataReader*, const SharedMessage::DroneState& sample, const SampleInfo&) override
     {
+        // ========== 加这行调试打印 ==========
+        printf("[DEBUG][收到底层] 无人机%d 坐标: (%.2f, %.2f)\n", sample.drone_id, sample.x, sample.y);
+        // =====================================
         SwarmComm::StateCallback callback;
         { std::lock_guard<std::mutex> lock(gMutex); callback = gStateCallback; }
         if (callback) callback(sample);
@@ -108,7 +111,18 @@ bool InitDDS()
 
 bool PublishCmd(const SharedMessage::DroneCmd& cmd)
 {
+ 
     std::lock_guard<std::mutex> lock(gMutex);
+    // ========== 锁内、发送前 ==========
+    printf("[DEBUG] 发送DDS前 formation_text 地址: %p\n", cmd.formation_text);
+    if (cmd.formation_text == nullptr) {
+        printf("[DEBUG] formation_text 是空指针 NULL\n");
+    }
+    else {
+        printf("[DEBUG] formation_text 内容: [%s]\n", cmd.formation_text);
+    }
+    // ================================
+
     return gCommandWriter != NULL && gCommandWriter->write(cmd, HANDLE_NIL_NATIVE) == RETCODE_OK;
 }
 

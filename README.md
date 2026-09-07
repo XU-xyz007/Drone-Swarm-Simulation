@@ -1,56 +1,191 @@
-# Drone-Swarm-Simulation (无人机集群 DDS 通信仿真系统)
+# Drone-Swarm-Simulation（无人机集群 DDS 通信仿真系统）
 
-本项目为无人机集群的底层通信 MVP，基于国产 ZR-DDS 构建。目前已实现主控台（Controller）与无人机（Drone）的跨进程坐标指令单向通信。
+基于国产 ZR-DDS 中间件构建的无人机集群仿真系统，包含主控台（Controller）与无人机节点（Drone）两个可执行程序，实现队形控制指令下发、无人机状态实时回传与可视化渲染。
 
----
-
-## ⚠️ 架构师留言：关于本项目的工程规范
-
-为了彻底消灭“在我的电脑上能跑，在你电脑上报错”的环境毒瘤，本项目进行了深度工程化重构，**已全面禁用绝对路径（如 `D:\Programs\...`）**！
-我们采用了“系统环境变量 + VS 宏定义”的动态路径映射方案。请所有组员在后续开发中，**严格遵守此规范，绝对不要向工程属性中写入任何带有盘符的本地死路径**。
+**当前版本：V1.0（首次联调成功）**
+- 主控端：Qt 6.5.3 + Visual Studio 2022（Qt VS Tools 插件）
+- 通信层：ZR-DDS 2.5.0
+- 功能：8 架无人机编队控制、状态实时渲染、队形到达校验
 
 ---
 
-## 🛠️ 环境配置指南（拉取代码后必做）
+## 一、环境依赖（拉取代码前必装）
 
-### 第 1 步：配置系统环境变量（全队统一暗号）
-1. 在 Windows 搜索并打开“编辑系统环境变量”。
-2. 在“用户变量”中，点击**新建**。
-3. **变量名**：`ZRDDS_HOME`
-4. **变量值**：填入你电脑上 ZRDDS 的安装根目录（例如 `D:\Programs\ZRDDS\ZRDDS-2.5.0`）。
-5. 💡 **核心注意：配置完成后，必须彻底关闭并重新打开 Visual Studio 2022，环境变量才会生效！**
+| 依赖 | 版本 | 说明 |
+|------|------|------|
+| Visual Studio | 2022（Community/Pro） | 必须安装「使用 C++ 的桌面开发」工作负载 |
+| Qt | 6.5.3（MSVC 2019/2022 64-bit 组件） | 安装时勾选对应 MSVC 编译器套件 |
+| Qt VS Tools | 最新版 | VS 扩展，用于在 VS 中编译 Qt 项目 |
+| ZR-DDS | 2.5.0 | 国产 DDS 中间件，安装路径后续配置环境变量 |
 
-### 第 2 步：运行环境依赖（临时手动处理）
-在点击运行前，请手动进行以下操作（后续版本将加入自动化构建脚本）：
-1. 进入你电脑的 ZRDDS 安装目录。
-2. 将 `lib/ZRDDSCppd_VS2015.dll` 复制到本工程的 `x64/Debug` 文件夹下。
-3. 将 `ZRDDS_QOS_PROFILES.xml` 复制到本工程的 `x64/Debug` 文件夹下。
-*(注：如果刚拉下代码没有 `x64/Debug` 文件夹，请在 VS 中点击顶部的“生成 -> 生成解决方案”即可产生。)*
+> 注意：Qt 安装时必须选择 **MSVC 2019 64-bit** 或 **MSVC 2022 64-bit** 组件，不能只装 MinGW。
 
 ---
 
-## 🔍 核心配置核对清单（仅供学习与排错）
-本项目已通过 Git 同步了完美的 VS 属性配置。正常情况下**你无需任何修改即可编译**。但如果编译报错，请检查你 VS 中的属性是否与以下“相对路径规范”一致（右键项目 -> 属性）：
+## 二、拉取代码后的配置步骤
 
-*   **1. 附加包含目录 (C/C++ -> 常规)**
-    *   `$(ZRDDS_HOME)\include\ZRDDSCoreInterface`
-    *   `$(ZRDDS_HOME)\include\CPlusPlusInterface`
-    *   `$(SolutionDir)SharedMessage\gen_code` （注：指向公共消息体目录）
-*   **2. 预处理器定义 (C/C++ -> 预处理器)**
-    *   `_ZRDDSDLLIMPORT`
-    *   `_ZRDDSCPPINTERFACE`
-*   **3. 运行库 (C/C++ -> 代码生成)**
-    *   多线程调试 DLL (`/MDd`)
-*   **4. 附加库目录 (链接器 -> 常规)**
-    *   `$(ZRDDS_HOME)\lib`
-*   **5. 附加依赖项 (链接器 -> 输入)**
-    *   `ZRDDSCppd_VS2015.lib`
-*   **6. 工作目录 (调试)**
-    *   `$(OutDir)` （注：确保所有项目统一读取 `x64/Debug` 中的 XML 配置）
+### 第 1 步：配置 ZR-DDS 环境变量（全队统一）
+
+1. Windows 搜索「编辑系统环境变量」→ 打开 → 点击「环境变量」
+2. 在「用户变量」中点击「新建」：
+   - **变量名**：`ZRDDS_HOME`
+   - **变量值**：你电脑上 ZR-DDS 的安装根目录（例如 `D:\Programs\ZRDDS\ZRDDS-2.5.0`）
+3. **配置完成后，必须彻底关闭并重新打开 Visual Studio 2022**，环境变量才会生效。
+
+### 第 2 步：用 VS 2022 打开解决方案
+
+1. 双击项目根目录下的 `Drone-Swarm-Simulation.sln`
+2. VS 顶部配置选择 **Debug / x64**
+3. 点击「生成」→「生成解决方案」（快捷键 `Ctrl+Shift+B`）
+4. 编译成功后，会在 `x64\Debug\` 目录下生成 `Controller.exe` 和 `Drone.exe`
+
+> 不需要手动"转 Qt 项目"——`.vcxproj` 已经配置好了 Qt 编译选项，装完 Qt 和 Qt VS Tools 后直接打开就能编译。
+
+### 第 3 步：复制运行时依赖到输出目录
+
+编译完成后，将以下文件复制到 `x64\Debug\` 目录：
+
+1. **ZR-DDS 动态库**：从 `%ZRDDS_HOME%\lib\` 复制 `ZRDDSCppd_VS2015.dll` 到 `x64\Debug\`
+2. **QoS 配置文件**：项目根目录下的 `ZRDDS_QOS_PROFILES.xml` 复制到 `x64\Debug\`
+3. **License 文件**：`zrddslicence.lic` 复制到 `x64\Debug\`（如果有的话）
+
+> 如果刚拉代码没有 `x64\Debug` 文件夹，先执行一次「生成解决方案」就会自动创建。
 
 ---
 
-## 🚀 运行方式
-- 本工程包含 `Controller`（主控台） 和 `Drone`（无人机） 两个独立项目，以及 `SharedMessage`（公共数据协议）目录。
-- **调试测试**：在 VS 解决方案资源管理器中，分别右键 `Controller` 或 `Drone` 将其“设为启动项目”并运行或解决方案设置多项目启动。
-- **双端联调**：直接前往工程的 `x64/Debug` 文件夹，同时双击运行 `Controller.exe` 和 `Drone.exe`，即可观察到 DDS 底层通信数据的实时收发。
+## 三、运行方式（多项目启动 / 双端联调）
+
+### 方式一：VS 多项目启动（推荐，可同时调试）
+
+1. 在 VS 解决方案资源管理器中，右键解决方案 →「属性」
+2. 左侧选「通用属性」→「启动项目」
+3. 选择「多启动项目」，把 `Controller` 和 `Drone` 的操作都设为「启动」
+4. 点击「确定」，然后按 `F5` 即可同时启动两个程序
+5. 启动顺序：Drone（无人机节点）先启动，Controller（主控台）后启动
+
+### 方式二：直接运行 exe（纯联调测试）
+
+1. 进入 `x64\Debug\` 目录
+2. 先双击 `Drone.exe` 启动无人机仿真节点
+3. 再双击 `Controller.exe` 启动主控界面
+4. 在主控界面配置参数后点击「起飞」，观察画布中无人机状态
+
+---
+
+## 四、目录结构
+
+```
+Drone-Swarm-Simulation/
+├── Controller/                  # 主控台项目（Qt 界面 + DDS 适配）
+│   ├── main.cpp                 # 程序入口、模块组装、DDS 适配层（手动赋值转换）
+│   ├── Controller.vcxproj       # VS 项目文件（已配置 Qt 编译选项）
+│   └── x64/                     # 编译输出（已被 gitignore）
+│
+├── Drone/                       # 无人机仿真节点项目
+│   └── ...
+│
+├── Communication/               # DDS 通信底层封装
+│   ├── DdsService.h
+│   └── DdsService.cpp
+│
+├── SharedMessage/               # IDL 自动生成的 DDS 消息结构体（SharedMessage 命名空间）
+│   ├── gen_code/
+│   │   ├── DroneMessage.h       # DDS 自动生成的 DroneCmd / DroneState 结构体
+│   │   └── ...
+│   └── *.idl                    # IDL 接口定义源文件
+│
+├── qt_master_ui/                # UI 业务层代码（主控 UI 同学负责）
+│   └── QtDemo/
+│       ├── MainWindow.h/cpp     # 主窗口、渲染、状态缓存读取
+│       ├── core/
+│       │   ├── DroneState.h     # 业务层 DroneState 结构体（全局命名空间）
+│       │   ├── DroneCmd.h       # 业务层 DroneCmd 结构体（全局命名空间）
+│       │   ├── DroneStateCache.h/cpp  # 线程安全的状态缓存
+│       │   ├── ICommandSender.h # 命令发送抽象接口
+│       │   ├── IStateReceiver.h # 状态接收抽象接口
+│       │   └── FormationChecker.h/cpp # 队形到达校验
+│       └── render/              # 渲染相关（DroneItem 等）
+│
+├── Algorithm/                   # 算法模块
+├── x64/                         # 解决方案级编译输出（已被 gitignore）
+├── ZRDDS_QOS_PROFILES.xml       # DDS QoS 配置文件（需复制到输出目录）
+├── Drone-Swarm-Simulation.sln   # VS 解决方案文件
+├── .gitignore
+└── README.md
+```
+
+---
+
+## 五、关键开发规范（所有人必须遵守）
+
+### 1. 【红线】禁止结构体强转
+
+项目中存在**两套完全独立定义的结构体**，二进制内存布局不一致，**绝对禁止使用 `reinterpret_cast` 强制转换**：
+
+| 结构体来源 | 所在位置 | 命名空间 | 说明 |
+|-----------|----------|----------|------|
+| DDS 自动生成 | `SharedMessage/gen_code/DroneMessage.h` | `SharedMessage` | 用于网络序列化，使用 `DDS_ULong`、`DDS_Double` 等 DDS 专用类型 |
+| 业务层定义 | `qt_master_ui/QtDemo/core/DroneState.h`、`DroneCmd.h` | 全局命名空间 | 用于渲染和逻辑计算，使用标准 C++ 类型和 `enum class` |
+
+**强转一定会出问题的原因**：
+- 枚举大小不同：DDS 枚举通常 1 字节，业务层 `enum class : uint32_t` 是 4 字节
+- 内存对齐规则不同：两边编译器填充的空字节位置、大小不一致
+- 字段数量不同：业务层会扩展 DDS 没有的字段（如 `transitioning`）
+- 字符串类型不同：业务层用 `std::string`（24 字节），DDS 用 `DDS_Char*`（8 字节指针）
+
+**正确做法**：在 `Controller/main.cpp` 的适配层中，**逐个字段手动赋值**，枚举类型用 `static_cast` 显式转换。
+
+### 2. 跨线程规范
+
+DDS 回调运行在后台线程，**所有 UI 操作和 Qt 对象调用必须通过 `QMetaObject::invokeMethod` 抛到 Qt 主线程**，禁止在 DDS 回调中直接操作 UI。
+
+### 3. 依赖注入顺序
+
+模块组装必须严格遵循顺序：
+1. 创建所有模块实例（发送器、接收器、缓存、校验器）
+2. **绑定所有回调接口**（最容易遗漏，之前出过 bug）
+3. 把模块指针传入主窗口
+4. 启动后台接收
+5. 显示界面、进入事件循环
+
+### 4. 路径规范
+
+**绝对禁止在工程属性中写入任何带有盘符的本地死路径**（如 `D:\Programs\...`）。所有第三方库路径通过系统环境变量 `$(ZRDDS_HOME)` 引用，保证全队可复现。
+
+---
+
+## 六、常见问题排查
+
+### 1. 画面无无人机显示
+按链路顺序排查：
+1. DDS 通信是否正常（看控制台有没有 `[DEBUG][回调入口]` 日志）
+2. 数据是否到 UI 主线程（看有没有 `[DEBUG][UI线程]` 日志）
+3. 回调是否绑定（看 `[调试] 回调是否有效` 输出，必须为 1）
+4. 缓存是否写入成功（在 `updateDroneDisplay()` 开头打印 `states.size()`）
+5. 渲染过滤条件是否把无人机跳过了（如 `y <= 0` 过滤）
+
+### 2. 命令下发无效 / 无人机端报 UTF-8 校验失败
+- 检查 `Controller/main.cpp` 中 `RealCommandSender::sendCommand` 是否使用了手动字段赋值
+- 确认 `formation_text` 字段是否设为合法空字符串（`const_cast<DDS_Char*>("")`）
+- **绝对不要改回 `reinterpret_cast` 强转**
+
+### 3. 编译报错找不到 Qt 头文件 / 元对象编译器 (moc) 报错
+- 确认已安装 Qt 6.5.3 且勾选了 MSVC 64-bit 组件
+- 确认已安装 Qt VS Tools 扩展
+- 在 VS 中点击「扩展」→「Qt VS Tools」→「Qt Versions」，确认 Qt 6.5.3 路径已配置
+- 右键项目 →「属性」→「Qt Project Settings」，确认 Qt Installation 选择了 6.5.3
+
+### 4. 运行时提示缺少 DLL
+- 确认 `ZRDDSCppd_VS2015.dll` 已复制到 `x64\Debug\`
+- 确认 Qt 运行时 DLL 已在 PATH 中（Qt VS Tools 调试时会自动配置，直接运行 exe 可能需要手动配置 PATH 或用 windeployqt）
+
+### 5. 拉取别人的代码更新后是否需要重新"转 Qt"？
+**不需要**。项目文件（`.vcxproj`）已经配置好了所有 Qt 编译选项，拉取后直接「清理解决方案」→「重新生成解决方案」即可。如果出现奇怪的编译错误，先执行「生成」→「清理解决方案」再重新编译。
+
+---
+
+## 七、版本历史
+
+| 版本 | 日期 | 说明 |
+|------|------|------|
+| V1.0 | 2026-09-07 | 首次联调成功。修复 DDS 结构体强转导致的字段错位问题，打通状态接收→缓存→渲染完整链路，实现 8 架无人机编队控制与实时渲染。 |

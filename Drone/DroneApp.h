@@ -23,6 +23,7 @@ public:
 
     void OnStateReceived(const SharedMessage::DroneState& state);
     void OnCommandReceived(const SharedMessage::DroneCmd& cmd);
+    void PrintDebugStatus();
 
 private:
     void RunLoop();

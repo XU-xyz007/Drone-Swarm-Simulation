@@ -45,6 +45,27 @@
     <ClCompile Include="..\Communication\DdsService.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="..\qt_master_ui\QtDemo\core\DroneStateCache.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\qt_master_ui\QtDemo\core\FormationChecker.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\qt_master_ui\QtDemo\MainWindow.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\qt_master_ui\QtDemo\render\CoordinateMapper.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\qt_master_ui\QtDemo\test\TestStateReceiver.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\qt_master_ui\QtDemo\render\DroneItem.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\qt_master_ui\QtDemo\test\StressTestReceiver.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\SharedMessage\gen_code\DroneMessage.h">
@@ -83,5 +104,19 @@
     <ClInclude Include="..\Communication\DdsService.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="..\qt_master_ui\QtDemo\render\DroneItem.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <QtMoc Include="..\qt_master_ui\QtDemo\test\TestStateReceiver.h">
+      <Filter>头文件</Filter>
+    </QtMoc>
+    <QtMoc Include="..\qt_master_ui\QtDemo\MainWindow.h">
+      <Filter>头文件</Filter>
+    </QtMoc>
+    <QtMoc Include="..\qt_master_ui\QtDemo\test\StressTestReceiver.h">
+      <Filter>头文件</Filter>
+    </QtMoc>
   </ItemGroup>
 </Project>

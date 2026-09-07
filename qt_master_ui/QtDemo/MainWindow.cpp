@@ -232,7 +232,7 @@ void MainWindow::setupStatusBar() {
 
 void MainWindow::onTakeoff() {
     int formationIdx = m_comboFormation->currentIndex();
-    DroneCmd cmd;
+    DroneCmd cmd = {};
     cmd.cmd_id = m_cmdSender->getLastCmdId() + 1;
     cmd.cmd_type = DroneCmdType::CMD_TAKEOFF;
     cmd.target_x = m_spinCenterX->value();
@@ -253,7 +253,14 @@ void MainWindow::onTakeoff() {
         cmd.formation_id = static_cast<uint32_t>(formationIdx);
     }
 
+    // ========== 加在 sendCommand 之前 ==========
+    printf("[DEBUG] MainWindow发送前 formation_text 是否为空: %d\n", cmd.formation_text.empty());
+    printf("[DEBUG] MainWindow发送前 内容: [%s]\n", cmd.formation_text.c_str());
+    // ==========================================
+
     m_cmdSender->sendCommand(cmd);
+
+
 
     m_formationChecker->setLatestCmdId(cmd.cmd_id);
     m_stateReceiver->setLatestCmdId(cmd.cmd_id);
@@ -265,7 +272,7 @@ void MainWindow::onTakeoff() {
 
 void MainWindow::onFormation() {
     int formationIdx = m_comboFormation->currentIndex();
-    DroneCmd cmd;
+    DroneCmd cmd = {};
     cmd.cmd_id = m_cmdSender->getLastCmdId() + 1;
     cmd.cmd_type = DroneCmdType::CMD_FORMATION;
     cmd.target_x = m_spinCenterX->value();
@@ -289,7 +296,14 @@ void MainWindow::onFormation() {
         cmd.formation_text = "";
     }
 
+    // ========== 加在 sendCommand 之前 ==========
+    printf("[DEBUG] MainWindow发送前 formation_text 是否为空: %d\n", cmd.formation_text.empty());
+    printf("[DEBUG] MainWindow发送前 内容: [%s]\n", cmd.formation_text.c_str());
+    // ==========================================
+
     m_cmdSender->sendCommand(cmd);
+
+
 
     uint32_t N = static_cast<uint32_t>(m_spinN->value());
     m_formationChecker->setExpectedCount(N);
@@ -315,7 +329,13 @@ void MainWindow::onLand() {
     cmd.cmd_id = m_cmdSender->getLastCmdId() + 1;
     cmd.cmd_type = DroneCmdType::CMD_LAND;
     cmd.expected_count = static_cast<uint32_t>(m_spinN->value());
+    // ========== 加在 sendCommand 之前 ==========
+    printf("[DEBUG] MainWindow发送前 formation_text 是否为空: %d\n", cmd.formation_text.empty());
+    printf("[DEBUG] MainWindow发送前 内容: [%s]\n", cmd.formation_text.c_str());
+    // ==========================================
+
     m_cmdSender->sendCommand(cmd);
+
 
     m_formationChecker->setLatestCmdId(cmd.cmd_id);
     m_stateReceiver->setLatestCmdId(cmd.cmd_id);
@@ -326,11 +346,17 @@ void MainWindow::onLand() {
 }
 
 void MainWindow::onEmergency() {
-    DroneCmd cmd;
+    DroneCmd cmd = {};
     cmd.cmd_id = m_cmdSender->getLastCmdId() + 1;
     cmd.cmd_type = DroneCmdType::CMD_EMERGENCY;
     cmd.expected_count = static_cast<uint32_t>(m_spinN->value());
+    // ========== 加在 sendCommand 之前 ==========
+    printf("[DEBUG] MainWindow发送前 formation_text 是否为空: %d\n", cmd.formation_text.empty());
+    printf("[DEBUG] MainWindow发送前 内容: [%s]\n", cmd.formation_text.c_str());
+    // ==========================================
+
     m_cmdSender->sendCommand(cmd);
+
 
     m_formationChecker->setLatestCmdId(cmd.cmd_id);
     m_stateReceiver->setLatestCmdId(cmd.cmd_id);
@@ -383,8 +409,14 @@ void MainWindow::onRenderTick() {
 
 void MainWindow::updateDroneDisplay() {
     auto states = m_stateCache->getAllStates();
+    std::cout << "[UI缓存] 无人机数量 = " << states.size() << std::endl;
+    if (!states.empty()) {
+        std::cout << "  首架 id=" << states[0].drone_id
+            << " x=" << states[0].x
+            << " y=" << states[0].y << std::endl;
+    }
 
-    if (states.empty()) return;
+    //if (states.empty()) return;
 
     m_coordMapper->autoFit(m_graphicsView, states);
 
