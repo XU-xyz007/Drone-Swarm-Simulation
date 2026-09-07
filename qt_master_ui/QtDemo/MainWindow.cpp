@@ -8,6 +8,7 @@
 #include "render/DroneItem.h"
 #include "render/ColorConfig.h"
 #include "render/CoordinateMapper.h"
+#include "render/GridScene.h"
 #include "test/TestStateReceiver.h"
 #include "test/StressTestReceiver.h"
 #include "test/TestPresets.h"
@@ -127,8 +128,6 @@ void MainWindow::setupParameterPanel(QWidget* panel) {
     m_comboFormation->addItem("1 - 一字");
     m_comboFormation->addItem("2 - 三角");
     m_comboFormation->addItem("3 - 圆形");
-    m_comboFormation->addItem("4 - 字母D");
-    m_comboFormation->addItem("5 - 字母S");
     m_comboFormation->addItem("文字队形");
     m_comboFormation->setToolTip("选择队形类型");
     form->addRow("队形:", m_comboFormation);
@@ -141,7 +140,7 @@ void MainWindow::setupParameterPanel(QWidget* panel) {
 
     connect(m_comboFormation, QOverload<int>::of(&QComboBox::currentIndexChanged),
             [this](int index) {
-                m_editFormationText->setEnabled(index == 6);
+                m_editFormationText->setEnabled(index == 4);
             });
 
     m_spinCenterX = new QDoubleSpinBox();
@@ -177,7 +176,7 @@ void MainWindow::setupParameterPanel(QWidget* panel) {
 }
 
 void MainWindow::setupCanvas() {
-    m_scene = new QGraphicsScene(this);
+    m_scene = new GridScene(this);
     m_scene->setSceneRect(-200, -200, 400, 400);
 
     m_graphicsView = new QGraphicsView(m_scene);
@@ -240,15 +239,9 @@ void MainWindow::onTakeoff() {
     cmd.spacing = m_spinSpacing->value();
     cmd.expected_count = static_cast<uint32_t>(m_spinN->value());
 
-    if (formationIdx == 6) {
-        QString text = m_editFormationText->text().trimmed().toUpper();
-        if (text == "D") {
-            cmd.formation_id = 4;
-        } else if (text == "S") {
-            cmd.formation_id = 5;
-        } else {
-            cmd.formation_id = 0;
-        }
+    if (formationIdx == 4) {
+        cmd.formation_id = 0;
+        cmd.formation_text = m_editFormationText->text().trimmed().toUpper().toStdString();
     } else {
         cmd.formation_id = static_cast<uint32_t>(formationIdx);
     }
@@ -280,19 +273,11 @@ void MainWindow::onFormation() {
     cmd.spacing = m_spinSpacing->value();
     cmd.expected_count = static_cast<uint32_t>(m_spinN->value());
 
-    if (formationIdx == 6) {
-        QString text = m_editFormationText->text().trimmed().toUpper();
-        if (text == "D") {
-            cmd.formation_id = 4;
-        } else if (text == "S") {
-            cmd.formation_id = 5;
-        } else {
-            statusBar()->showMessage("文字队形 \"" + text + "\" 暂无");
-            std::cout << "[UI] 文字队形 \"" << text.toStdString() << "\" 暂无" << std::endl;
-            return;
-        }
+    if (formationIdx == 4) {
+        cmd.formation_id = 0;
+        cmd.formation_text = m_editFormationText->text().trimmed().toUpper().toStdString();
     } else {
-        cmd.formation_id = (formationIdx < 6) ? static_cast<uint32_t>(formationIdx) : 0;
+        cmd.formation_id = static_cast<uint32_t>(formationIdx);
         cmd.formation_text = "";
     }
 
@@ -316,7 +301,7 @@ void MainWindow::onFormation() {
 
     m_formationCompleted = false;
 
-    std::string formationName = (formationIdx < 6)
+    std::string formationName = (formationIdx < 4)
         ? m_comboFormation->currentText().toStdString()
         : ("文字:\"" + cmd.formation_text + "\"");
     statusBar()->showMessage(QString::fromStdString(
@@ -423,7 +408,7 @@ void MainWindow::updateDroneDisplay() {
     std::unordered_set<uint32_t> activeIds;
 
     for (const auto& state : states) {
-        if (state.y <= 0.0) continue;
+        if (state.status == DroneStatus::ST_LANDED) continue;
 
         activeIds.insert(state.drone_id);
 

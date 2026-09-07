@@ -37,6 +37,8 @@ add_executable(QtDemo
     "render/DroneItem.cpp"
     "render/CoordinateMapper.h"
     "render/CoordinateMapper.cpp"
+    "render/GridScene.h"
+    "render/GridScene.cpp"
     "test/TestStateReceiver.h"
     "test/TestStateReceiver.cpp"
     "test/StressTestReceiver.h"
