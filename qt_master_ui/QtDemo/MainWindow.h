@@ -23,6 +23,7 @@ class IDroneStateCache;
 class IFormationChecker;
 class DroneItem;
 class CoordinateMapper;
+class GridScene;
 class TestStateReceiver;
 class StressTestReceiver;
 struct StressPreset;
@@ -77,7 +78,7 @@ private:
     QDoubleSpinBox* m_spinSpacing;
 
     QGraphicsView*  m_graphicsView;
-    QGraphicsScene* m_scene;
+    GridScene*      m_scene;
 
     QPushButton* m_btnTakeoff;
     QPushButton* m_btnFormation;

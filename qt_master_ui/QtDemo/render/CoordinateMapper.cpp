@@ -13,16 +13,17 @@ void CoordinateMapper::autoFit(QGraphicsView* view,
 
     for (const auto& s : states) {
         if (s.transitioning) continue;
-        if (s.y <= 0.0) continue;
+        if (s.status == DroneStatus::ST_LANDED) continue;
+        double displayY = -s.y;
         if (first) {
             minX = s.x; maxX = s.x;
-            minY = s.y; maxY = s.y;
+            minY = displayY; maxY = displayY;
             first = false;
         } else {
             minX = std::min(minX, s.x);
             maxX = std::max(maxX, s.x);
-            minY = std::min(minY, s.y);
-            maxY = std::max(maxY, s.y);
+            minY = std::min(minY, displayY);
+            maxY = std::max(maxY, displayY);
         }
     }
 

@@ -18,7 +18,7 @@ DroneItem::DroneItem(uint32_t droneId, QGraphicsItem* parent)
 }
 
 void DroneItem::updateFromState(const DroneState& state) {
-    QPointF newPos(state.x, state.y);
+    QPointF newPos(state.x, -state.y);
     QPointF oldPos = pos();
 
     if (m_trailPoints.empty() ||
