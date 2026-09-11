@@ -1,8 +1,10 @@
 module SharedMessage
 {
     // --- 状态枚举 ---
-    enum DroneStatus { 
-        ST_IDLE, ST_TAKEOFF, ST_CRUISE, ST_LANDING, ST_LANDED, ST_FAULT, ST_LOST 
+    enum DroneStatus {
+        ST_IDLE, ST_TAKEOFF, ST_CRUISE, ST_LANDING, ST_LANDED, ST_FAULT, ST_LOST,
+        // V2：保留既有枚举顺序，在末尾追加执行节点状态。
+        ST_HOVER, ST_IN_TRANSIT, ST_FALLBACK_CATCHING
     };
 
     // --- 命令枚举 ---
@@ -17,7 +19,15 @@ module SharedMessage
         DroneStatus status;
         double x; 
         double y;
-        unsigned long current_cmd_id; 
+        unsigned long current_cmd_id;
+
+        // V2：实际速度，由 C 在完成最终动力学限幅后发布。
+        double vx;
+        double vy;
+
+        // V2：去中心化失联共识信息与状态样本序号。
+        sequence<unsigned long, 10> suspected_lost_ids;
+        unsigned long seq_num;
     };
 
     // --- 2. 主控命令频道 ---
