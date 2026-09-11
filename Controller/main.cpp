@@ -2,8 +2,11 @@
 #include <QMessageBox>
 #include <QFileInfo>
 #include <QMetaObject>
+#include <QTimer>
 #include <iostream>
 #include <cstring>
+#include <map>
+#include <mutex>
 #include <windows.h>
 
 
@@ -16,6 +19,43 @@
 
 // --- 引入 D 模块 (通信) 的头文件 ---
 #include "../Communication/DdsService.h"
+
+namespace {
+
+class DdsTelemetry {
+public:
+    void record(const SharedMessage::DroneState& state) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        ++samples_;
+        payloadBytes_ += SwarmComm::EstimateStatePayloadBytes(state);
+        std::map<DDS_ULong, DDS_ULong>::const_iterator last = lastSequence_.find(state.drone_id);
+        if (last != lastSequence_.end()) {
+            if (state.seq_num > last->second + 1) gaps_ += state.seq_num - last->second - 1;
+            else if (state.seq_num <= last->second) ++outOfOrder_;
+        }
+        lastSequence_[state.drone_id] = state.seq_num;
+    }
+
+    void reportAndReset() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const double kbitPerSecond = static_cast<double>(payloadBytes_ * 8ULL) / 1000.0;
+        std::cout << "[DDS telemetry] " << samples_ << " state samples/s | "
+                  << payloadBytes_ << " payload bytes/s (" << kbitPerSecond
+                  << " kbit/s) | seq gaps: " << gaps_
+                  << " | out-of-order: " << outOfOrder_ << std::endl;
+        samples_ = payloadBytes_ = gaps_ = outOfOrder_ = 0;
+    }
+
+private:
+    std::mutex mutex_;
+    std::map<DDS_ULong, DDS_ULong> lastSequence_;
+    unsigned long long samples_ = 0;
+    unsigned long long payloadBytes_ = 0;
+    unsigned long long gaps_ = 0;
+    unsigned long long outOfOrder_ = 0;
+};
+
+} // namespace
 
 // ======================================================================
 // 1. 发送适配器：将 UI 的发送请求转换为 DDS 的 Publish
@@ -77,25 +117,22 @@ public:
     void start() override {
         // 订阅底层状态，回调参数是 SharedMessage 命名空间下的类型
         SwarmComm::SubscribeState([this](const SharedMessage::DroneState& ddsState) {
-            // ========== 加这里：验证DDS回调有没有进到这里 ==========
-            printf("[DEBUG][回调入口] 收到无人机%d DDS坐标: (%.2f, %.2f)\n", ddsState.drone_id, ddsState.x, ddsState.y);
+            telemetry_.record(ddsState);
             // 跨线程抛到 UI 主线程
             QMetaObject::invokeMethod(qApp, [this, ddsState]() {
-                // ========== 加这里：验证数据有没有成功到UI主线程 ==========
-                printf("[DEBUG][UI线程] 处理无人机%d DDS坐标: (%.2f, %.2f)\n", ddsState.drone_id, ddsState.x, ddsState.y);
-                printf("[调试] 回调是否有效：%d\n", (bool)m_onStateReceived);
                 if (m_onStateReceived) {
                     // 类型转换：转回基类接口使用的全局类型
                     DroneState state;
                     state.drone_id = ddsState.drone_id;
                     state.x = ddsState.x;
                     state.y = ddsState.y;
+                    state.vx = ddsState.vx;
+                    state.vy = ddsState.vy;
                     state.status = static_cast<DroneStatus>(ddsState.status);
                     state.current_cmd_id = ddsState.current_cmd_id;
+                    state.seq_num = ddsState.seq_num;
                     state.transitioning = false; // DDS没传，业务层自己给默认值
                     m_onStateReceived(state);
-                    printf("[调试] 回调调用完成\n");
-
                 }
                 }, Qt::QueuedConnection);
             });
@@ -106,10 +143,13 @@ public:
         // V1 版本 DdsService 暂无 Unsubscribe，留空即可
     }
 
+    void reportTelemetry() { telemetry_.reportAndReset(); }
+
 private:
     std::function<void(const DroneState&)> m_onStateReceived;
     std::function<void(uint32_t)> m_onDroneRemoved;
     uint32_t m_latestCmdId = 0;
+    DdsTelemetry telemetry_;
 };
 
 // ======================================================================
@@ -153,6 +193,12 @@ int main(int argc, char* argv[]) {
     );
 
     MainWindow w(&realCmdSender, &realStateReceiver, &stateCache, &formationChecker);
+
+    QTimer telemetryTimer;
+    QObject::connect(&telemetryTimer, &QTimer::timeout, [&realStateReceiver]() {
+        realStateReceiver.reportTelemetry();
+    });
+    telemetryTimer.start(1000);
 
     // 启动后台接收
     realStateReceiver.start();

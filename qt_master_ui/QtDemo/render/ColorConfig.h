@@ -11,6 +11,11 @@ inline QColor colorForStatus(DroneStatus status) {
         case DroneStatus::ST_LANDED:  return QColor(156, 39, 176);  // 紫色：已降落
         case DroneStatus::ST_FAULT:   return QColor(244, 67, 54);   // 红色：故障
         case DroneStatus::ST_LOST:    return QColor(128, 128, 128); // 灰色：失联
+        case DroneStatus::ST_HOVER:   return QColor(0, 188, 212);   // 青色：悬停待命
+        case DroneStatus::ST_IN_TRANSIT:
+            return QColor(255, 152, 0);                              // 橙色：协同移动中
+        case DroneStatus::ST_FALLBACK_CATCHING:
+            return QColor(255, 87, 34);                              // 深橙色：自治重排追赶
         default:                      return QColor(255, 255, 255);
     }
 }
