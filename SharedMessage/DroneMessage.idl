@@ -1,8 +1,9 @@
 module SharedMessage
 {
     // --- 状态枚举 ---
-    enum DroneStatus { 
-        ST_IDLE, ST_TAKEOFF, ST_CRUISE, ST_LANDING, ST_LANDED, ST_FAULT, ST_LOST 
+    enum DroneStatus {
+        ST_IDLE, ST_TAKEOFF, ST_CRUISE, ST_LANDING, ST_LANDED, ST_FAULT, ST_LOST,
+        ST_HOVER, ST_IN_TRANSIT, ST_FALLBACK_CATCHING
     };
 
     // --- 命令枚举 ---
@@ -17,7 +18,13 @@ module SharedMessage
         DroneStatus status;
         double x; 
         double y;
-        unsigned long current_cmd_id; 
+        unsigned long current_cmd_id;
+        // V2: actual velocity after C applies its local dynamics limits.
+        double vx;
+        double vy;
+        // V2: decentralized suspected-lost quorum and per-drone sample sequence.
+        sequence<unsigned long, 10> suspected_lost_ids;
+        unsigned long seq_num;
     };
 
     // --- 2. 主控命令频道 ---

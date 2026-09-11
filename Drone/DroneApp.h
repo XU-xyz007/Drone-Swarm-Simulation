@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #include <iostream>
 #include <cmath>
 #include <chrono>
@@ -8,11 +8,11 @@
 #include <atomic>
 #include <string>
 
-// DDS ÒÀÀµ
+// DDS ä¾èµ–
 #include "DroneMessage.h"
 #include "../Communication/DdsService.h"
 
-// ÒıÈëÕæÊµµÄ B Ä£¿éËã·¨½Ó¿Ú[cite: 2]
+// å¼•å…¥çœŸå®çš„ B æ¨¡å—ç®—æ³•æ¥å£[cite: 2]
 #include "FormationAlgorithm.h"
 
 class DroneApp {
@@ -32,17 +32,19 @@ private:
     unsigned long drone_id_;
     std::atomic<bool> running_{ false };
 
-    // ÁÚ¾Ó±í
+    // é‚»å±…è¡¨
     std::map<unsigned long, SharedMessage::DroneState> known_drones_;
     std::mutex neighbors_mutex_;
 
-    // ÎïÀí×´Ì¬
+    // ç‰©ç†çŠ¶æ€
     double cur_x_, cur_y_;
+    double cur_vx_ = 0.0, cur_vy_ = 0.0;
     double target_x_, target_y_;
     bool is_moving_ = false;
 
-    // ÒµÎñÈ¥ÖØÓë×´Ì¬µÆ
+    // ä¸šåŠ¡å»é‡ä¸çŠ¶æ€ç¯
     unsigned long last_cmd_id_ = 0;
+    unsigned long seq_num_ = 0;
     SharedMessage::DroneStatus current_status_ = SharedMessage::ST_IDLE;
 
     std::mutex state_mutex_;

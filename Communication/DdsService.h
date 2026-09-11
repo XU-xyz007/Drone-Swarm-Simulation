@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <functional>
 #include "../SharedMessage/gen_code/DroneMessage.h"
@@ -17,6 +17,10 @@ bool PublishCmd(const SharedMessage::DroneCmd& cmd);
 bool PublishState(const SharedMessage::DroneState& state);
 bool SubscribeCmd(CommandCallback onCommand);
 bool SubscribeState(StateCallback onState);
+
+// CDR payload estimate for application-level telemetry. DDS/UDP/IP headers
+// and discovery traffic are intentionally excluded.
+unsigned long EstimateStatePayloadBytes(const SharedMessage::DroneState& state);
 void ShutdownDDS();
 
 } // namespace SwarmComm

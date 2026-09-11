@@ -1,4 +1,4 @@
-#include "DdsService.h"
+ï»¿#include "DdsService.h"
 
 #include <windows.h>
 #include <cstring>
@@ -48,9 +48,6 @@ class StateReaderListener : public SimpleDataReaderListener<SharedMessage::Drone
 public:
     void on_process_sample(DataReader*, const SharedMessage::DroneState& sample, const SampleInfo&) override
     {
-        // ========== ¼ÓÕâÐÐµ÷ÊÔ´òÓ¡ ==========
-        printf("[DEBUG][ÊÕµ½µ×²ã] ÎÞÈË»ú%d ×ø±ê: (%.2f, %.2f)\n", sample.drone_id, sample.x, sample.y);
-        // =====================================
         SwarmComm::StateCallback callback;
         { std::lock_guard<std::mutex> lock(gMutex); callback = gStateCallback; }
         if (callback) callback(sample);
@@ -113,16 +110,6 @@ bool PublishCmd(const SharedMessage::DroneCmd& cmd)
 {
  
     std::lock_guard<std::mutex> lock(gMutex);
-    // ========== ËøÄÚ¡¢·¢ËÍÇ° ==========
-    printf("[DEBUG] ·¢ËÍDDSÇ° formation_text µØÖ·: %p\n", cmd.formation_text);
-    if (cmd.formation_text == nullptr) {
-        printf("[DEBUG] formation_text ÊÇ¿ÕÖ¸Õë NULL\n");
-    }
-    else {
-        printf("[DEBUG] formation_text ÄÚÈÝ: [%s]\n", cmd.formation_text);
-    }
-    // ================================
-
     return gCommandWriter != NULL && gCommandWriter->write(cmd, HANDLE_NIL_NATIVE) == RETCODE_OK;
 }
 
@@ -144,6 +131,14 @@ bool SubscribeState(StateCallback onState)
     std::lock_guard<std::mutex> lock(gMutex);
     gStateCallback = onState;
     return static_cast<bool>(gStateCallback);
+}
+
+unsigned long EstimateStatePayloadBytes(const SharedMessage::DroneState& state)
+{
+    // CDR fixed portion: id, status, x/y, command id, alignment, vx/vy,
+    // sequence length and sequence number. Each suspected ID adds 4 bytes.
+    const unsigned long fixedBytes = 56;
+    return fixedBytes + 4UL * DDS_ULongSeq_get_length(&state.suspected_lost_ids);
 }
 
 void ShutdownDDS()
