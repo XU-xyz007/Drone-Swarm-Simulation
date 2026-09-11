@@ -39,6 +39,7 @@ add_executable(QtDemo
     "render/CoordinateMapper.cpp"
     "render/GridScene.h"
     "render/GridScene.cpp"
+    "render/TelemetrySparkline.h"
     "test/TestStateReceiver.h"
     "test/TestStateReceiver.cpp"
     "test/StressTestReceiver.h"

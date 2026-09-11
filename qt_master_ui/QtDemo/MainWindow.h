@@ -26,6 +26,7 @@ class CoordinateMapper;
 class GridScene;
 class TestStateReceiver;
 class StressTestReceiver;
+class TelemetrySparkline;
 struct StressPreset;
 
 class MainWindow : public QMainWindow {
@@ -58,9 +59,13 @@ private:
     void setupCanvas();
     void setupButtons(QWidget* container);
     void setupStressTestPanel(QWidget* container);
+    void setupTelemetryPanel(QWidget* panel);
+    void setupQualityPanel(QWidget* panel);
     void setupStatusBar();
     void updateDroneDisplay();
     void updateStressStats();
+    void updateCommunicationTelemetry();
+    void updateQualityMetrics();
 
     ICommandSender*    m_cmdSender;
     IStateReceiver*    m_stateReceiver;
@@ -89,12 +94,21 @@ private:
 
     QComboBox* m_comboStressPreset;
     QLabel* m_lblStressStats;
+    QLabel* m_lblMessageRate;
+    QLabel* m_lblThroughput;
+    QLabel* m_lblSequenceGaps;
+    QLabel* m_lblOutOfOrder;
+    TelemetrySparkline* m_telemetrySparkline;
+    QLabel* m_lblMinDistance;
+    QLabel* m_lblSyncError;
+    QLabel* m_lblFormationResidual;
 
     CoordinateMapper* m_coordMapper;
 
     QTimer* m_completionTimer;
     QTimer* m_renderTimer;
     QTimer* m_stressStatsTimer;
+    QTimer* m_telemetryTimer;
 
     std::unordered_map<uint32_t, DroneItem*> m_droneItems;
     bool m_formationCompleted = false;
