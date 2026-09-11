@@ -90,30 +90,6 @@ DDS::TypeCode* DroneStatusGetTypeCode()
         s_typeCode = NULL;
         return NULL;
     }
-    ret = s_typeCode->addMemberToEnum(7, "ST_HOVER", 7);
-    if (ret < 0)
-    {
-        printf("add enum member ST_HOVER failed(%d).", ret);
-        DDS::TypeCodeFactory::getInstance().deleteTC(s_typeCode);
-        s_typeCode = NULL;
-        return NULL;
-    }
-    ret = s_typeCode->addMemberToEnum(8, "ST_IN_TRANSIT", 8);
-    if (ret < 0)
-    {
-        printf("add enum member ST_IN_TRANSIT failed(%d).", ret);
-        DDS::TypeCodeFactory::getInstance().deleteTC(s_typeCode);
-        s_typeCode = NULL;
-        return NULL;
-    }
-    ret = s_typeCode->addMemberToEnum(9, "ST_FALLBACK_CATCHING", 9);
-    if (ret < 0)
-    {
-        printf("add enum member ST_FALLBACK_CATCHING failed(%d).", ret);
-        DDS::TypeCodeFactory::getInstance().deleteTC(s_typeCode);
-        s_typeCode = NULL;
-        return NULL;
-    }
     return s_typeCode;
 }
 
@@ -258,7 +234,7 @@ void DroneStateDestroySample(ZRMemPool* pool, DroneState* sample)
 
 DDS_ULong DroneStateGetSerializedSampleMaxSize()
 {
-    return 96;
+    return 28;
 }
 
 DDS_ULong DroneStateGetSerializedKeyMaxSize()
@@ -320,25 +296,6 @@ DDS_Boolean DroneStateInitializeEx(
 
     self->current_cmd_id = 0;
 
-    self->vx = 0;
-
-    self->vy = 0;
-
-    DDS_ULongSeq_initialize_ex(&self->suspected_lost_ids, pool, allocateMemory);
-
-    self->seq_num = 0;
-
-    if (allocateMemory)
-    {
-        if (!DDS_ULongSeq_set_maximum(&self->suspected_lost_ids, 10))
-        {
-            printf("Set maximum for self->suspected_lost_ids failed.");
-            return false;
-        }
-    }
-    else
-    {
-    }
     return true;
 }
 
@@ -347,7 +304,6 @@ void DroneStateFinalizeEx(
     ZRMemPool* pool,
     DDS_Boolean deletePointers)
 {
-    DDS_ULongSeq_finalize(&self->suspected_lost_ids);
 }
 
 DDS_Boolean DroneStateCopyEx(
@@ -360,14 +316,6 @@ DDS_Boolean DroneStateCopyEx(
     dst->x = src->x;
     dst->y = src->y;
     dst->current_cmd_id = src->current_cmd_id;
-    dst->vx = src->vx;
-    dst->vy = src->vy;
-    if (!DDS_ULongSeq_copy(&dst->suspected_lost_ids, &src->suspected_lost_ids))
-    {
-        printf("copy member suspected_lost_ids failed.");
-        return false;
-    }
-    dst->seq_num = src->seq_num;
     return true;
 }
 
@@ -391,23 +339,6 @@ void DroneStatePrintData(const DroneState *sample)
     printf("\n");
 
     printf("sample->current_cmd_id: %u\n", sample->current_cmd_id);
-    printf("\n");
-
-    printf("sample->vx: %lf\n", sample->vx);
-    printf("\n");
-
-    printf("sample->vy: %lf\n", sample->vy);
-    printf("\n");
-
-    DDS_ULong suspected_lost_idsTmpLen = DDS_ULongSeq_get_length(&sample->suspected_lost_ids);
-    printf("sample->suspected_lost_ids: %d\n", suspected_lost_idsTmpLen);
-    for (DDS_ULong i = 0; i < suspected_lost_idsTmpLen; ++i)
-    {
-        printf("sample->suspected_lost_ids[%u]: %u\n", i, *DDS_ULongSeq_get_reference(&sample->suspected_lost_ids, i));
-    }
-    printf("\n");
-
-    printf("sample->seq_num: %u\n", sample->seq_num);
     printf("\n");
 
 }
@@ -540,99 +471,6 @@ DDS::TypeCode* DroneStateGetTypeCode()
         return NULL;
     }
 
-    memberTc = factory.getPrimitiveTC(DDS_TK_DOUBLE);
-    if (memberTc == NULL)
-    {
-        printf("Get Member vx TypeCode failed.");
-        factory.deleteTC(s_typeCode);
-        s_typeCode = NULL;
-        return NULL;
-    }
-    ret = s_typeCode->addMemberToStruct(
-        5,
-        5,
-        "vx",
-        memberTc,
-        false,
-        false);
-    if (ret < 0)
-    {
-        factory.deleteTC(s_typeCode);
-        s_typeCode = NULL;
-        return NULL;
-    }
-
-    memberTc = factory.getPrimitiveTC(DDS_TK_DOUBLE);
-    if (memberTc == NULL)
-    {
-        printf("Get Member vy TypeCode failed.");
-        factory.deleteTC(s_typeCode);
-        s_typeCode = NULL;
-        return NULL;
-    }
-    ret = s_typeCode->addMemberToStruct(
-        6,
-        6,
-        "vy",
-        memberTc,
-        false,
-        false);
-    if (ret < 0)
-    {
-        factory.deleteTC(s_typeCode);
-        s_typeCode = NULL;
-        return NULL;
-    }
-
-    memberTc = factory.getPrimitiveTC(DDS_TK_UINT);
-    if (memberTc != NULL)
-    {
-        memberTc = factory.createSequenceTC(10, memberTc);
-    }
-    if (memberTc == NULL)
-    {
-        printf("Get Member suspected_lost_ids TypeCode failed.");
-        factory.deleteTC(s_typeCode);
-        s_typeCode = NULL;
-        return NULL;
-    }
-    ret = s_typeCode->addMemberToStruct(
-        7,
-        7,
-        "suspected_lost_ids",
-        memberTc,
-        false,
-        false);
-    factory.deleteTC(memberTc);
-    if (ret < 0)
-    {
-        factory.deleteTC(s_typeCode);
-        s_typeCode = NULL;
-        return NULL;
-    }
-
-    memberTc = factory.getPrimitiveTC(DDS_TK_UINT);
-    if (memberTc == NULL)
-    {
-        printf("Get Member seq_num TypeCode failed.");
-        factory.deleteTC(s_typeCode);
-        s_typeCode = NULL;
-        return NULL;
-    }
-    ret = s_typeCode->addMemberToStruct(
-        8,
-        8,
-        "seq_num",
-        memberTc,
-        false,
-        false);
-    if (ret < 0)
-    {
-        factory.deleteTC(s_typeCode);
-        s_typeCode = NULL;
-        return NULL;
-    }
-
     return s_typeCode;
 }
 
@@ -668,56 +506,6 @@ DDS_Long DroneStateSerialize(const DroneState* sample, CDRSerializer *cdr)
         return -2;
     }
 
-    if (!CDRSerializerPutUntype(cdr, (DDS_Octet*) &sample->vx, 8))
-    {
-        printf("serialize sample->vx failed.");
-        return -2;
-    }
-
-    if (!CDRSerializerPutUntype(cdr, (DDS_Octet*) &sample->vy, 8))
-    {
-        printf("serialize sample->vy failed.");
-        return -2;
-    }
-
-    if (!CDRSerializerPutUntype(cdr, (DDS_Octet*) &(sample->suspected_lost_ids)._length, 4))
-    {
-        printf("serialize length of sample->suspected_lost_ids failed.");
-        return -2;
-    }
-#ifdef _ZRDDS_INCLUDE_NO_SERIALIZE_MODE
-    if (!CDRSerializerNoSerializingMode(cdr))
-    {
-#endif/*_ZRDDS_INCLUDE_NO_SERIALIZE_MODE*/
-        if ((sample->suspected_lost_ids)._contiguousBuffer)
-        {
-            if (!CDRSerializerPutUntypeArray(cdr, (DDS_Octet*)(sample->suspected_lost_ids)._contiguousBuffer, (sample->suspected_lost_ids)._length, 4))
-            {
-                printf("serialize sample->suspected_lost_ids failed.");
-                return -2;
-            }
-        }
-        else
-        {
-            for (DDS_ULong i = 0; i < (sample->suspected_lost_ids)._length; ++i)
-            {
-                if (!CDRSerializerPutUntype(cdr, (DDS_Octet*) &*DDS_ULongSeq_get_reference(&sample->suspected_lost_ids, i), 4))
-                {
-                    printf("serialize sample->suspected_lost_ids failed.");
-                    return -2;
-                }
-            }
-        }
-#ifdef _ZRDDS_INCLUDE_NO_SERIALIZE_MODE
-    }
-#endif/*_ZRDDS_INCLUDE_NO_SERIALIZE_MODE*/
-
-    if (!CDRSerializerPutUntype(cdr, (DDS_Octet*) &sample->seq_num, 4))
-    {
-        printf("serialize sample->seq_num failed.");
-        return -2;
-    }
-
     return 0;
 }
 
@@ -739,10 +527,6 @@ DDS_Long DroneStateDeserialize(
         sample->x = 0;
         sample->y = 0;
         sample->current_cmd_id = 0;
-        sample->vx = 0;
-        sample->vy = 0;
-        DDS_ULongSeq_initialize_ex(&sample->suspected_lost_ids, pool, true);
-        sample->seq_num = 0;
         return 0;
     }
     if (!CDRDeserializerGetUntype(cdr, (DDS_Octet*) &sample->x, 8))
@@ -750,80 +534,17 @@ DDS_Long DroneStateDeserialize(
         sample->x = 0;
         sample->y = 0;
         sample->current_cmd_id = 0;
-        sample->vx = 0;
-        sample->vy = 0;
-        DDS_ULongSeq_initialize_ex(&sample->suspected_lost_ids, pool, true);
-        sample->seq_num = 0;
         return 0;
     }
     if (!CDRDeserializerGetUntype(cdr, (DDS_Octet*) &sample->y, 8))
     {
         sample->y = 0;
         sample->current_cmd_id = 0;
-        sample->vx = 0;
-        sample->vy = 0;
-        DDS_ULongSeq_initialize_ex(&sample->suspected_lost_ids, pool, true);
-        sample->seq_num = 0;
         return 0;
     }
     if (!CDRDeserializerGetUntype(cdr, (DDS_Octet*) &sample->current_cmd_id, 4))
     {
         sample->current_cmd_id = 0;
-        sample->vx = 0;
-        sample->vy = 0;
-        DDS_ULongSeq_initialize_ex(&sample->suspected_lost_ids, pool, true);
-        sample->seq_num = 0;
-        return 0;
-    }
-    if (!CDRDeserializerGetUntype(cdr, (DDS_Octet*) &sample->vx, 8))
-    {
-        sample->vx = 0;
-        sample->vy = 0;
-        DDS_ULongSeq_initialize_ex(&sample->suspected_lost_ids, pool, true);
-        sample->seq_num = 0;
-        return 0;
-    }
-    if (!CDRDeserializerGetUntype(cdr, (DDS_Octet*) &sample->vy, 8))
-    {
-        sample->vy = 0;
-        DDS_ULongSeq_initialize_ex(&sample->suspected_lost_ids, pool, true);
-        sample->seq_num = 0;
-        return 0;
-    }
-    DDS_ULong suspected_lost_idsTmpLen = 0;
-    if (!CDRDeserializerGetUntype(cdr, (DDS_Octet*) &suspected_lost_idsTmpLen, 4))
-    {
-        DDS_ULongSeq_initialize_ex(&sample->suspected_lost_ids, pool, true);
-        sample->seq_num = 0;
-        return 0;
-    }
-    if (!DDS_ULongSeq_ensure_length(&sample->suspected_lost_ids, suspected_lost_idsTmpLen, suspected_lost_idsTmpLen))
-    {
-        printf("Set maxiumum member sample->suspected_lost_ids failed.");
-        return -3;
-    }
-    if (sample->suspected_lost_ids._contiguousBuffer)
-    {
-        if (!CDRDeserializerGetUntypeArray(cdr, (DDS_Octet*)sample->suspected_lost_ids._contiguousBuffer, suspected_lost_idsTmpLen, 4))
-        {
-            printf("deserialize sample->suspected_lost_ids failed.");
-            return -2;
-        }
-    }
-    else
-    {
-        for (DDS_ULong i = 0; i < suspected_lost_idsTmpLen; ++i)
-        {
-            if (!CDRDeserializerGetUntype(cdr, (DDS_Octet*) &*DDS_ULongSeq_get_reference(&sample->suspected_lost_ids, i), 4))
-            {
-                printf("deserialize sample->suspected_lost_ids failed.");
-                return -2;
-            }
-        }
-    }
-    if (!CDRDeserializerGetUntype(cdr, (DDS_Octet*) &sample->seq_num, 4))
-    {
-        sample->seq_num = 0;
         return 0;
     }
     return 0;
@@ -840,19 +561,6 @@ DDS_ULong DroneStateGetSerializedSampleSize(const DroneState* sample, DDS_ULong 
     currentAlignment += CDRSerializerGetUntypeSize(8, currentAlignment);
 
     currentAlignment += CDRSerializerGetUntypeSize(8, currentAlignment);
-
-    currentAlignment += CDRSerializerGetUntypeSize(4, currentAlignment);
-
-    currentAlignment += CDRSerializerGetUntypeSize(8, currentAlignment);
-
-    currentAlignment += CDRSerializerGetUntypeSize(8, currentAlignment);
-
-    currentAlignment += CDRSerializerGetUntypeSize(4, currentAlignment);
-    DDS_ULong suspected_lost_idsLen = DDS_ULongSeq_get_length(&sample->suspected_lost_ids);
-    if (suspected_lost_idsLen != 0)
-    {
-        currentAlignment += 4 * suspected_lost_idsLen;
-    }
 
     currentAlignment += CDRSerializerGetUntypeSize(4, currentAlignment);
 

@@ -24,10 +24,7 @@ typedef enum DroneStatus
     ST_LANDING = 3,
     ST_LANDED = 4,
     ST_FAULT = 5,
-    ST_LOST = 6,
-    ST_HOVER = 7,
-    ST_IN_TRANSIT = 8,
-    ST_FALLBACK_CATCHING = 9
+    ST_LOST = 6
 } DroneStatus;// @BitBound(32)
 
 DDS_USER_SEQUENCE_CPP(DroneStatusSeq, DroneStatus);
@@ -57,10 +54,6 @@ typedef struct DroneState
     DDS_Double x; // @ID(2)
     DDS_Double y; // @ID(3)
     DDS_ULong current_cmd_id; // @ID(4)
-    DDS_Double vx; // @ID(5)
-    DDS_Double vy; // @ID(6)
-    DDS_ULongSeq suspected_lost_ids; // @ID(7) /* maximum length = (10) */
-    DDS_ULong seq_num; // @ID(8)
 } DroneState; // @Extensibility(EXTENSIBLE)
 
 DDS_USER_SEQUENCE_CPP(DroneStateSeq, DroneState);

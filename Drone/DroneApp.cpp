@@ -24,18 +24,18 @@ void DroneApp::OnStateReceived(const SharedMessage::DroneState& state) {
 void DroneApp::OnCommandReceived(const SharedMessage::DroneCmd& cmd) {
     std::lock_guard<std::mutex> lock(state_mutex_);
 
-    // Ö¸ï¿½ï¿½È¥ï¿½Ø£ï¿½ï¿½ï¿½ï¿½Ú±ï¿½ï¿½Ø¼ï¿½Â¼ï¿½ï¿½Ö´ï¿½ï¿½
+    // Ö¸ÁîÈ¥ÖØ£º´óÓÚ±¾µØ¼ÇÂ¼²ÅÖ´ÐÐ
     if (cmd.cmd_id <= last_cmd_id_) {
         return;
     }
 
-    // ï¿½ï¿½ï¿½ï¿½ï¿½ßµï¿½ drone_id (1-N) ï¿½ï¿½ï¿½ï¿½Ó³ï¿½ï¿½Îªï¿½ï¿½ 0 ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ index[cite: 2]
+    // ½«ÔÚÏßµÄ drone_id (1-N) ÉýÐòÓ³ÉäÎª´Ó 0 ¿ªÊ¼µÄÁ¬Ðø index[cite: 2]
     unsigned int my_index = drone_id_ - 1;
 
     switch (cmd.cmd_type) {
     case SharedMessage::CMD_TAKEOFF:
     case SharedMessage::CMD_FORMATION: {
-        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Êµï¿½ï¿½ B Ä£ï¿½ï¿½ï¿½ã·¨ï¿½ï¿½ï¿½ï¿½[cite: 2]
+        // ¹¹ÔìÕæÊµµÄ B Ä£¿éËã·¨ÇëÇó[cite: 2]
         SwarmFormation::FormationRequest request;
         request.formation_id = (cmd.cmd_type == SharedMessage::CMD_TAKEOFF && cmd.formation_id == 0) ? 0 : cmd.formation_id;
         request.formation_text = cmd.formation_text ? cmd.formation_text : "";
@@ -44,7 +44,7 @@ void DroneApp::OnCommandReceived(const SharedMessage::DroneCmd& cmd) {
         request.center_y = cmd.target_y;
         request.spacing = cmd.spacing > 0.0 ? cmd.spacing : 2.0;
 
-        // ï¿½ï¿½ï¿½ï¿½ B Ä£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð²ï¿½Î»[cite: 2]
+        // µ÷ÓÃ B Ä£¿éÉú³ÉËùÓÐ²ÛÎ»[cite: 2]
         const auto result = SwarmFormation::GenerateSlots(request);
 
         if (result.success) {
@@ -56,8 +56,8 @@ void DroneApp::OnCommandReceived(const SharedMessage::DroneCmd& cmd) {
             }
         }
         else {
-            // ï¿½ï¿½ï¿½ï¿½ã·¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó¡ B Ä£ï¿½ï¿½ï¿½á¹©ï¿½Ä¹æ·¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢[cite: 2]
-            std::cerr << "[Drone " << drone_id_ << " ï¿½ã·¨ï¿½ï¿½ï¿½ï¿½] "
+            // Èç¹ûËã·¨±¨´í£¬´òÓ¡ B Ä£¿éÌá¹©µÄ¹æ·¶´íÎóÐÅÏ¢[cite: 2]
+            std::cerr << "[Drone " << drone_id_ << " Ëã·¨¾ÜÔØ] "
                 << SwarmFormation::FormationErrorMessage(result.error) << std::endl;
         }
         break;
@@ -107,25 +107,18 @@ void DroneApp::RunLoop() {
                     cur_y_ = target_y_;
                     is_moving_ = false;
                     current_is_moving = false;
-                    cur_vx_ = 0.0;
-                    cur_vy_ = 0.0;
-                    if (current_status_ == SharedMessage::ST_CRUISE || current_status_ == SharedMessage::ST_IN_TRANSIT)
-                        current_status_ = SharedMessage::ST_HOVER;
+                    if (current_status_ == SharedMessage::ST_CRUISE) {
+                        current_status_ = SharedMessage::ST_IDLE;
+                    }
                 }
                 else {
-                    cur_vx_ = (dx / dist) * max_speed;
-                    cur_vy_ = (dy / dist) * max_speed;
-                    cur_x_ += cur_vx_ * dt;
-                    cur_y_ += cur_vy_ * dt;
-                    current_status_ = SharedMessage::ST_IN_TRANSIT;
+                    cur_x_ += (dx / dist) * step;
+                    cur_y_ += (dy / dist) * step;
                 }
-            } else {
-                cur_vx_ = 0.0;
-                cur_vy_ = 0.0;
             }
         }
 
-        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½
+        // ¶¯¾²·ÖÀëµÄ×ÔÊÊÓ¦·¢ÐÅ
         if (current_is_moving) {
             PublishCurrentState();
             hover_tick_counter = 0;
@@ -140,7 +133,7 @@ void DroneApp::RunLoop() {
             }
         }
 
-        // 100ms ï¿½Ï¸ñ²¹³ï¿½ï¿½ï¿½ï¿½ï¿½
+        // 100ms ÑÏ¸ñ²¹³¥ÐÝÃß
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time).count();
         if (elapsed < 100) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100 - elapsed));
@@ -158,22 +151,19 @@ void DroneApp::PublishCurrentState() {
         state.current_cmd_id = last_cmd_id_;
         state.x = cur_x_;
         state.y = cur_y_;
-        state.vx = cur_vx_;
-        state.vy = cur_vy_;
-        state.seq_num = ++seq_num_;
-        state.status = is_moving_ ? SharedMessage::ST_IN_TRANSIT : current_status_;
+        state.status = is_moving_ ? SharedMessage::ST_CRUISE : current_status_;
     }
 
     bool ok = SwarmComm::PublishState(state);
     if (!ok) {
-        std::cerr << "[ï¿½ï¿½ï¿½ç¾¯ï¿½ï¿½] ï¿½ï¿½ï¿½Ë»ï¿½ #" << state.drone_id << " ×´Ì¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½" << std::endl;
+        std::cerr << "[ÍøÂç¾¯¸æ] ÎÞÈË»ú #" << state.drone_id << " ×´Ì¬°ü·¢ËÍÊ§°Ü£¡" << std::endl;
     }
 }
 
 void DroneApp::PrintDebugStatus() {
     std::lock_guard<std::mutex> lock(state_mutex_);
-    std::cout << "  -> ï¿½ï¿½ï¿½Ë»ï¿½ #" << drone_id_
-        << " | ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½: (" << cur_x_ << ", " << cur_y_ << ")"
-        << " | Ä¿ï¿½ï¿½ï¿½Î»: (" << target_x_ << ", " << target_y_ << ")"
-        << " | ×´Ì¬ï¿½ï¿½: " << current_status_ << std::endl;
+    std::cout << "  -> ÎÞÈË»ú #" << drone_id_
+        << " | µ±Ç°×ø±ê: (" << cur_x_ << ", " << cur_y_ << ")"
+        << " | Ä¿±ê²ÛÎ»: (" << target_x_ << ", " << target_y_ << ")"
+        << " | ×´Ì¬Âë: " << current_status_ << std::endl;
 }
