@@ -14,10 +14,13 @@
 
 // 引入真实的 B 模块算法接口[cite: 2]
 #include "FormationAlgorithm.h"
+#include "SwarmControlCModule.h"
+
 
 class DroneApp {
 public:
     DroneApp(unsigned long id, double init_x, double init_y);
+    ~DroneApp();
     void Start();
     void Stop();
 
@@ -46,6 +49,12 @@ private:
     unsigned long last_cmd_id_ = 0;
     unsigned long seq_num_ = 0;
     SharedMessage::DroneStatus current_status_ = SharedMessage::ST_IDLE;
+
+    V2Config swarm_config_;                   // 集群配置
+    SwarmControlCModule* c_module_ = nullptr; // C模块指针
+
+    // 记录系统启动时间，用于计算 current_time_sec
+    std::chrono::steady_clock::time_point app_start_time_;
 
     std::mutex state_mutex_;
 }; 

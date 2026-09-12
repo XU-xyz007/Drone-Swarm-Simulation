@@ -144,6 +144,7 @@ copy /Y "$(ZRDDS_HOME)\lib\ZRDDSCppd_VS2015.dll" "$(OutDir)"</Command>
     <ClCompile Include="..\SharedMessage\gen_code\DroneMessageTypeSupport.cpp" />
     <ClCompile Include="DroneApp.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="SwarmControlCModule.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Algorithm\include\FormationAlgorithm.h" />
@@ -159,6 +160,7 @@ copy /Y "$(ZRDDS_HOME)\lib\ZRDDSCppd_VS2015.dll" "$(OutDir)"</Command>
     <ClInclude Include="..\SharedMessage\gen_code\DroneMessageDataWriter.h" />
     <ClInclude Include="..\SharedMessage\gen_code\DroneMessageTypeSupport.h" />
     <ClInclude Include="DroneApp.h" />
+    <ClInclude Include="SwarmControlCModule.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
