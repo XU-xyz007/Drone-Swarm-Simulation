@@ -50,6 +50,7 @@
     <QtMoc Include="..\qt_master_ui\QtDemo\test\TestStateReceiver.h" />
     <QtMoc Include="..\qt_master_ui\QtDemo\MainWindow.h" />
     <ClInclude Include="..\qt_master_ui\QtDemo\render\DroneItem.h" />
+    <ClInclude Include="..\qt_master_ui\QtDemo\render\TelemetrySparkline.h" />
     <QtMoc Include="..\qt_master_ui\QtDemo\test\StressTestReceiver.h" />
     <QtMoc Include="..\qt_master_ui\QtDemo\render\GridScene.h" />
     <ClInclude Include="..\SharedMessage\gen_code\DroneMessage.h" />

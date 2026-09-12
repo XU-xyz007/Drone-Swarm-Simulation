@@ -28,22 +28,31 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         ++samples_;
         payloadBytes_ += SwarmComm::EstimateStatePayloadBytes(state);
-        std::map<DDS_ULong, DDS_ULong>::const_iterator last = lastSequence_.find(state.drone_id);
-        if (last != lastSequence_.end()) {
-            if (state.seq_num > last->second + 1) gaps_ += state.seq_num - last->second - 1;
-            else if (state.seq_num <= last->second) ++outOfOrder_;
+        std::map<DDS_ULong, DDS_ULong>::iterator last = lastSequence_.find(state.drone_id);
+        if (last == lastSequence_.end()) {
+            lastSequence_[state.drone_id] = state.seq_num;
+        } else if (state.seq_num > last->second) {
+            if (state.seq_num > last->second + 1) {
+                gaps_ += state.seq_num - last->second - 1;
+            }
+            // Only advance the watermark. A late/duplicate sample must not
+            // make a following normal sample look like a sequence gap.
+            last->second = state.seq_num;
+        } else {
+            ++outOfOrder_;
         }
-        lastSequence_[state.drone_id] = state.seq_num;
     }
 
-    void reportAndReset() {
+    CommunicationTelemetry takeAndReset() {
         std::lock_guard<std::mutex> lock(mutex_);
-        const double kbitPerSecond = static_cast<double>(payloadBytes_ * 8ULL) / 1000.0;
-        std::cout << "[DDS telemetry] " << samples_ << " state samples/s | "
-                  << payloadBytes_ << " payload bytes/s (" << kbitPerSecond
-                  << " kbit/s) | seq gaps: " << gaps_
-                  << " | out-of-order: " << outOfOrder_ << std::endl;
+        CommunicationTelemetry telemetry;
+        telemetry.stateSamplesPerSecond = samples_;
+        telemetry.payloadBytesPerSecond = payloadBytes_;
+        telemetry.sequenceGaps = gaps_;
+        telemetry.outOfOrderSamples = outOfOrder_;
+        telemetry.available = true;
         samples_ = payloadBytes_ = gaps_ = outOfOrder_ = 0;
+        return telemetry;
     }
 
 private:
@@ -143,7 +152,9 @@ public:
         // V1 版本 DdsService 暂无 Unsubscribe，留空即可
     }
 
-    void reportTelemetry() { telemetry_.reportAndReset(); }
+    CommunicationTelemetry takeCommunicationTelemetry() override {
+        return telemetry_.takeAndReset();
+    }
 
 private:
     std::function<void(const DroneState&)> m_onStateReceived;
@@ -193,12 +204,6 @@ int main(int argc, char* argv[]) {
     );
 
     MainWindow w(&realCmdSender, &realStateReceiver, &stateCache, &formationChecker);
-
-    QTimer telemetryTimer;
-    QObject::connect(&telemetryTimer, &QTimer::timeout, [&realStateReceiver]() {
-        realStateReceiver.reportTelemetry();
-    });
-    telemetryTimer.start(1000);
 
     // 启动后台接收
     realStateReceiver.start();

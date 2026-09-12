@@ -3,6 +3,14 @@
 #include <functional>
 #include <cstdint>
 
+struct CommunicationTelemetry {
+    uint64_t stateSamplesPerSecond = 0;
+    uint64_t payloadBytesPerSecond = 0;
+    uint64_t sequenceGaps = 0;
+    uint64_t outOfOrderSamples = 0;
+    bool available = false;
+};
+
 class IStateReceiver {
 public:
     virtual ~IStateReceiver() = default;
@@ -20,4 +28,9 @@ public:
     virtual void setLatestCmdId(uint32_t cmdId) {}
 
     virtual void setDroneCount(uint32_t count) {}
+
+    // 取出并清零最近一个一秒窗口的主控端通信统计。
+    virtual CommunicationTelemetry takeCommunicationTelemetry() {
+        return CommunicationTelemetry();
+    }
 };

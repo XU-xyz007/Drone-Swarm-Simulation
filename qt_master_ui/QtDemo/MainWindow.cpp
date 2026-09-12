@@ -9,6 +9,7 @@
 #include "render/ColorConfig.h"
 #include "render/CoordinateMapper.h"
 #include "render/GridScene.h"
+#include "render/TelemetrySparkline.h"
 #include "test/TestStateReceiver.h"
 #include "test/StressTestReceiver.h"
 #include "test/TestPresets.h"
@@ -16,9 +17,14 @@
 #include <QMessageBox>
 #include <QVBoxLayout>
 #include <QFormLayout>
+#include <QGridLayout>
+#include <QLocale>
 #include <QWheelEvent>
 #include <QScrollBar>
+#include <algorithm>
+#include <cmath>
 #include <iostream>
+#include <limits>
 #include <unordered_set>
 
 MainWindow::MainWindow(ICommandSender* cmdSender,
@@ -73,6 +79,10 @@ MainWindow::MainWindow(ICommandSender* cmdSender,
     m_stressStatsTimer = new QTimer(this);
     connect(m_stressStatsTimer, &QTimer::timeout, this, &MainWindow::updateStressStats);
     m_stressStatsTimer->start(1000);
+
+    m_telemetryTimer = new QTimer(this);
+    connect(m_telemetryTimer, &QTimer::timeout, this, &MainWindow::updateCommunicationTelemetry);
+    m_telemetryTimer->start(1000);
 }
 
 MainWindow::~MainWindow() {
@@ -103,6 +113,15 @@ void MainWindow::setupUi() {
 
     setupCanvas();
     mainLayout->addWidget(m_graphicsView, 1);
+
+    QWidget* rightPanel = new QWidget();
+    rightPanel->setFixedWidth(270);
+    QVBoxLayout* rightLayout = new QVBoxLayout(rightPanel);
+    rightLayout->setContentsMargins(0, 0, 0, 0);
+    setupTelemetryPanel(rightPanel);
+    setupQualityPanel(rightPanel);
+    rightLayout->addStretch();
+    mainLayout->addWidget(rightPanel);
 }
 
 void MainWindow::setupParameterPanel(QWidget* panel) {
@@ -394,14 +413,6 @@ void MainWindow::onRenderTick() {
 
 void MainWindow::updateDroneDisplay() {
     auto states = m_stateCache->getAllStates();
-    std::cout << "[UI缓存] 无人机数量 = " << states.size() << std::endl;
-    if (!states.empty()) {
-        std::cout << "  首架 id=" << states[0].drone_id
-            << " x=" << states[0].x
-            << " y=" << states[0].y << std::endl;
-    }
-
-    //if (states.empty()) return;
 
     m_coordMapper->autoFit(m_graphicsView, states);
 
@@ -431,6 +442,90 @@ void MainWindow::updateDroneDisplay() {
             ++it;
         }
     }
+}
+
+void MainWindow::setupTelemetryPanel(QWidget* panel) {
+    QGroupBox* group = new QGroupBox("通信性能", panel);
+    group->setToolTip("统计 DroneState 的 DDS 业务数据，不含 DDS/UDP/IP 协议头和发现流量。");
+    QVBoxLayout* layout = new QVBoxLayout(group);
+    layout->setSpacing(8);
+
+    QLabel* subtitle = new QLabel("实时 DDS 业务载荷（每秒窗口）", group);
+    subtitle->setStyleSheet("QLabel{color:#6e8494;font-size:11px;}");
+    layout->addWidget(subtitle);
+
+    QGridLayout* metrics = new QGridLayout();
+    metrics->setHorizontalSpacing(8);
+    metrics->setVerticalSpacing(7);
+    const QString valueStyle = "QLabel{background:#14242f;color:#d9f9f5;border:1px solid #294452;border-radius:4px;padding:5px 6px;font-weight:600;font-size:14px;}";
+    const QString labelStyle = "QLabel{color:#7f96a6;font-size:11px;}";
+    auto addMetric = [&](int row, const QString& label, QLabel*& value, const QString& tooltip) {
+        QLabel* name = new QLabel(label, group);
+        name->setStyleSheet(labelStyle);
+        name->setToolTip(tooltip);
+        value = new QLabel("—", group);
+        value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        value->setStyleSheet(valueStyle);
+        value->setToolTip(tooltip);
+        metrics->addWidget(name, row, 0);
+        metrics->addWidget(value, row, 1);
+    };
+    addMetric(0, "状态消息", m_lblMessageRate, "本秒收到的 DroneState 条目数。");
+    addMetric(1, "业务吞吐", m_lblThroughput, "本秒 CDR 业务载荷，单位 kbit/s。协议头和发现流量不计入。");
+    addMetric(2, "序列缺失", m_lblSequenceGaps, "根据同一无人机 seq_num 推断的缺失状态条目数。");
+    addMetric(3, "乱序样本", m_lblOutOfOrder, "seq_num 小于或等于上一条状态时计为乱序或重复。");
+    layout->addLayout(metrics);
+
+    QLabel* chartTitle = new QLabel("吞吐趋势 · 最近 45 秒（kbit/s）", group);
+    chartTitle->setStyleSheet("QLabel{color:#7f96a6;font-size:11px;margin-top:4px;}");
+    layout->addWidget(chartTitle);
+    m_telemetrySparkline = new TelemetrySparkline(group);
+    m_telemetrySparkline->setToolTip("青色曲线表示最近 45 个一秒窗口的业务吞吐量。");
+    layout->addWidget(m_telemetrySparkline);
+
+    QVBoxLayout* panelLayout = qobject_cast<QVBoxLayout*>(panel->layout());
+    if (panelLayout) panelLayout->addWidget(group);
+}
+
+void MainWindow::setupQualityPanel(QWidget* panel) {
+    QGroupBox* group = new QGroupBox("集群质量分析", panel);
+    group->setToolTip("主控端基于已接收的实时状态计算。安全阈值仅用于展示，不参与 B 模块避障决策。");
+    QVBoxLayout* layout = new QVBoxLayout(group);
+    layout->setSpacing(6);
+
+    QLabel* subtitle = new QLabel("主控状态几何统计", group);
+    subtitle->setStyleSheet("QLabel{color:#6e8494;font-size:11px;}");
+    layout->addWidget(subtitle);
+
+    const QString labelStyle = "QLabel{color:#7f96a6;font-size:11px;}";
+    const QString valueStyle = "QLabel{background:#14242f;color:#d9f9f5;border:1px solid #294452;border-radius:4px;padding:5px 6px;font-weight:600;font-size:14px;}";
+    auto addMetric = [&](const QString& label, QLabel*& value, const QString& tooltip) {
+        QHBoxLayout* row = new QHBoxLayout();
+        QLabel* name = new QLabel(label, group);
+        name->setStyleSheet(labelStyle);
+        name->setToolTip(tooltip);
+        value = new QLabel("—", group);
+        value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        value->setStyleSheet(valueStyle);
+        value->setToolTip(tooltip);
+        row->addWidget(name);
+        row->addWidget(value, 1);
+        layout->addLayout(row);
+    };
+    addMetric("当前最小机间距", m_lblMinDistance,
+              "每秒根据主控已接收的位置，计算任意两架无人机的最小欧氏距离。");
+    addMetric("同步到达误差", m_lblSyncError,
+              "需 C 模块提供每架机的到达事件或到达时间，当前协议尚未携带该数据。");
+    addMetric("队形收敛残差", m_lblFormationResidual,
+              "需 C/B 提供最终目标槽位，当前主控仅有实际位置，不能可靠计算。");
+
+    QLabel* hint = new QLabel("展示阈值：1.50 m；低于阈值仅告警，不干预避障。", group);
+    hint->setWordWrap(true);
+    hint->setStyleSheet("QLabel{color:#9a7445;font-size:10px;}");
+    layout->addWidget(hint);
+
+    QVBoxLayout* panelLayout = qobject_cast<QVBoxLayout*>(panel->layout());
+    if (panelLayout) panelLayout->addWidget(group);
 }
 
 void MainWindow::setupStressTestPanel(QWidget* container) {
@@ -535,6 +630,57 @@ void MainWindow::updateStressStats() {
         !fpsReady ? "QLabel{color:#888;font-size:11px;}" :
         (isHealthy ? "QLabel{color:#4CAF50;font-size:11px;}" :
                      "QLabel{color:#F44336;font-size:11px;}"));
+}
+
+void MainWindow::updateCommunicationTelemetry() {
+    updateQualityMetrics();
+    const CommunicationTelemetry telemetry = m_stateReceiver->takeCommunicationTelemetry();
+    if (!telemetry.available) {
+        m_lblMessageRate->setText("—");
+        m_lblThroughput->setText("—");
+        m_lblSequenceGaps->setText("—");
+        m_lblOutOfOrder->setText("—");
+        return;
+    }
+
+    const QLocale locale;
+    const double kbitPerSecond = static_cast<double>(telemetry.payloadBytesPerSecond * 8ULL) / 1000.0;
+    m_lblMessageRate->setText(locale.toString(static_cast<qulonglong>(telemetry.stateSamplesPerSecond)) + " /s");
+    m_lblThroughput->setText(locale.toString(kbitPerSecond, 'f', 2) + " kbit/s");
+    m_lblSequenceGaps->setText(locale.toString(static_cast<qulonglong>(telemetry.sequenceGaps)));
+    m_lblOutOfOrder->setText(locale.toString(static_cast<qulonglong>(telemetry.outOfOrderSamples)));
+    m_telemetrySparkline->appendSample(kbitPerSecond);
+
+    const QString normalStyle = "QLabel{background:#14242f;color:#d9f9f5;border:1px solid #294452;border-radius:4px;padding:5px 6px;font-weight:600;font-size:14px;}";
+    const QString alertStyle = "QLabel{background:#3b2427;color:#ffb4a8;border:1px solid #914447;border-radius:4px;padding:5px 6px;font-weight:600;font-size:14px;}";
+    m_lblSequenceGaps->setStyleSheet(telemetry.sequenceGaps == 0 ? normalStyle : alertStyle);
+    m_lblOutOfOrder->setStyleSheet(telemetry.outOfOrderSamples == 0 ? normalStyle : alertStyle);
+}
+
+void MainWindow::updateQualityMetrics() {
+    const std::vector<DroneState> states = m_stateCache->getAllStates();
+    if (states.size() < 2) {
+        m_lblMinDistance->setText("—");
+        m_lblSyncError->setText("待接入");
+        m_lblFormationResidual->setText("待接入");
+        return;
+    }
+
+    double minDistance = std::numeric_limits<double>::infinity();
+    for (size_t i = 0; i < states.size(); ++i) {
+        for (size_t j = i + 1; j < states.size(); ++j) {
+            const double dx = states[i].x - states[j].x;
+            const double dy = states[i].y - states[j].y;
+            minDistance = std::min(minDistance, std::sqrt(dx * dx + dy * dy));
+        }
+    }
+
+    const QString normalStyle = "QLabel{background:#14242f;color:#d9f9f5;border:1px solid #294452;border-radius:4px;padding:5px 6px;font-weight:600;font-size:14px;}";
+    const QString alertStyle = "QLabel{background:#3b2427;color:#ffb4a8;border:1px solid #914447;border-radius:4px;padding:5px 6px;font-weight:600;font-size:14px;}";
+    m_lblMinDistance->setText(QString::number(minDistance, 'f', 2) + " m");
+    m_lblMinDistance->setStyleSheet(minDistance < 1.50 ? alertStyle : normalStyle);
+    m_lblSyncError->setText("待 C 到达事件");
+    m_lblFormationResidual->setText("待目标槽位");
 }
 
 bool MainWindow::eventFilter(QObject* obj, QEvent* event) {
