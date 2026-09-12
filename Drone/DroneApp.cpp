@@ -3,6 +3,17 @@
 DroneApp::DroneApp(unsigned long id, double init_x, double init_y)
     : drone_id_(id), cur_x_(init_x), cur_y_(init_y),
     target_x_(init_x), target_y_(init_y) {
+
+    app_start_time_ = std::chrono::steady_clock::now();
+
+    // 实例化 C 模块
+    c_module_ = new SwarmControlCModule(id, swarm_config_);
+    c_module_->SetCurrentState(init_x, init_y, 0.0, 0.0);
+    c_module_->SetTarget(init_x, init_y);
+}
+
+DroneApp::~DroneApp() {
+    if (c_module_) delete c_module_;
 }
 
 void DroneApp::Start() {
@@ -19,6 +30,24 @@ void DroneApp::OnStateReceived(const SharedMessage::DroneState& state) {
 
     std::lock_guard<std::mutex> lock(neighbors_mutex_);
     known_drones_[state.drone_id] = state;
+
+    NeighborState ns;
+    ns.drone_id = state.drone_id;
+    ns.x = state.x;
+    ns.y = state.y;
+    ns.vx = state.vx;
+    ns.vy = state.vy;
+    ns.status = static_cast<V2DroneStatus>(state.status);
+
+    // 获取当前时间秒数，喂给容灾仲裁器
+    auto now = std::chrono::steady_clock::now();
+    double current_time_sec = std::chrono::duration<double>(now - app_start_time_).count();
+    ns.last_receive_time_sec = current_time_sec;
+
+    // 3. 喂给 C 模块
+    if (c_module_) {
+        c_module_->UpdateNeighbor(ns);
+    }
 }
 
 void DroneApp::OnCommandReceived(const SharedMessage::DroneCmd& cmd) {
@@ -52,7 +81,9 @@ void DroneApp::OnCommandReceived(const SharedMessage::DroneCmd& cmd) {
                 target_x_ = result.slots[my_index].x;
                 target_y_ = result.slots[my_index].y;
                 is_moving_ = true;
-                current_status_ = SharedMessage::ST_CRUISE;
+                if (c_module_) {
+                    c_module_->SetTarget(target_x_, target_y_);
+                }
             }
         }
         else {
@@ -66,9 +97,10 @@ void DroneApp::OnCommandReceived(const SharedMessage::DroneCmd& cmd) {
         target_x_ = cur_x_;
         target_y_ = cur_y_;
         is_moving_ = false;
-        cur_vx_ = 0.0;
-        cur_vy_ = 0.0;
-        current_status_ = SharedMessage::ST_HOVER;
+        
+        if (c_module_) {
+            c_module_->SetTarget(cur_x_, cur_y_);
+        }
         break;
     }
     case SharedMessage::CMD_LAND: {
@@ -88,69 +120,83 @@ void DroneApp::OnCommandReceived(const SharedMessage::DroneCmd& cmd) {
 }
 
 void DroneApp::RunLoop() {
-    const double dt = 0.1;
-    const double arrive_threshold = 0.05;
-    const double max_speed = 15.0;
-    int hover_tick_counter = 0;
+    auto last_loop_time = std::chrono::steady_clock::now();
 
     while (running_) {
-        auto start_time = std::chrono::steady_clock::now();
-        bool current_is_moving = false;
+        auto current_time = std::chrono::steady_clock::now();
 
+        // 计算物理积分步长 dt 和 运行绝对时间（秒）
+        double dt = std::chrono::duration<double>(current_time - last_loop_time).count();
+        double current_time_sec = std::chrono::duration<double>(current_time - app_start_time_).count();
+        last_loop_time = current_time;
+
+        DroneStateDDS c_output;
+        c_output.drone_id = drone_id_;
+        c_output.status = static_cast<V2DroneStatus>(current_status_);
+
+        // --- 1. 执行 C 模块 10Hz 闭环 ---
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
-            current_is_moving = is_moving_;
+            if (c_module_) {
+                // 将最新物理状态灌入 C 模块
+                c_module_->SetCurrentState(cur_x_, cur_y_, cur_vx_, cur_vy_);
 
-            if (is_moving_) {
-                double dx = target_x_ - cur_x_;
-                double dy = target_y_ - cur_y_;
-                double dist = std::hypot(dx, dy);
-                double step = max_speed * dt;
+                // 执行核心流水线 (意图生成 -> Mock避障 -> 动力学平滑 -> 遥测打包)
+                c_output = c_module_->RunLoop(current_time_sec, dt);
 
-                if (dist <= step || dist <= arrive_threshold) {
-                    cur_x_ = target_x_;
-                    cur_y_ = target_y_;
-                    is_moving_ = false;
-                    current_is_moving = false;
-                    cur_vx_ = 0.0;
-                    cur_vy_ = 0.0;
-                    if (current_status_ == SharedMessage::ST_CRUISE ||
-                        current_status_ == SharedMessage::ST_IN_TRANSIT) {
-                        current_status_ = SharedMessage::ST_HOVER;
-                    }
-                }
-                else {
-                    cur_vx_ = (dx / dist) * max_speed;
-                    cur_vy_ = (dy / dist) * max_speed;
-                    cur_x_ += cur_vx_ * dt;
-                    cur_y_ += cur_vy_ * dt;
-                    current_status_ = SharedMessage::ST_IN_TRANSIT;
-                }
-            } else {
-                cur_vx_ = 0.0;
-                cur_vy_ = 0.0;
+                // 根据 C 模块的动力学计算结果更新本机真实物理量
+                cur_x_ = c_output.x;
+                cur_y_ = c_output.y;
+                cur_vx_ = c_output.vx;
+                cur_vy_ = c_output.vy;
+                current_status_ = static_cast<SharedMessage::DroneStatus>(c_output.status);
             }
         }
 
-        // 动静分离的自适应发信
-        if (current_is_moving) {
-            PublishCurrentState();
-            hover_tick_counter = 0;
-        }
-        else {
-            if (hover_tick_counter == 0 || hover_tick_counter >= 10) {
-                PublishCurrentState();
-                hover_tick_counter = 1;
-            }
-            else {
-                hover_tick_counter++;
+        // --- 2. 组装并发布 IDL 结构包 ---
+        SharedMessage::DroneState state;
+        SharedMessage::DroneStateInitialize(&state);
+
+        state.drone_id = c_output.drone_id;
+        state.status = static_cast<SharedMessage::DroneStatus>(c_output.status);
+        state.x = cur_x_;
+        state.y = cur_y_;
+        state.vx = cur_vx_;
+        state.vy = cur_vy_;
+        state.current_cmd_id = last_cmd_id_;
+        state.seq_num = c_output.seq_num;
+
+        // 填充底层 DDS Sequence 数组，广播容灾怀疑失联 ID 列表
+        if (!c_output.suspected_lost_ids.empty()) {
+            // ZRDDS/DDS 序列标准分配长度
+            state.suspected_lost_ids.ensure_length(
+                static_cast<unsigned long>(c_output.suspected_lost_ids.size()),
+                static_cast<unsigned long>(c_output.suspected_lost_ids.size())
+            );
+            for (size_t i = 0; i < c_output.suspected_lost_ids.size(); ++i) {
+                state.suspected_lost_ids[i] = c_output.suspected_lost_ids[i];
             }
         }
 
-        // 100ms 严格补偿休眠
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time).count();
-        if (elapsed < 100) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100 - elapsed));
+        bool ok = SwarmComm::PublishState(state);
+        if (!ok) {
+            std::cerr << "[网络警告] 无人机 #" << state.drone_id << " 状态包发送失败！" << std::endl;
+        }
+
+        // 释放 DDS 内部深拷贝内存
+        SharedMessage::DroneStateFinalize(&state);
+
+        // --- 3. 严格补偿休眠 (实现基于全员静止原则的频率动态降级) ---
+        // 若 C 模块判定全员 HOVER，将返回 1Hz；若存在动态机动，返回 10Hz
+        double target_rate = c_module_ ? c_module_->GetCurrentPublishRate() : 10.0;
+        int sleep_ms = static_cast<int>(1000.0 / target_rate);
+
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - current_time).count();
+
+        // 扣除本轮算法执行与发包耗时，进行精确睡眠
+        if (elapsed < sleep_ms) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms - elapsed));
         }
     }
 }
