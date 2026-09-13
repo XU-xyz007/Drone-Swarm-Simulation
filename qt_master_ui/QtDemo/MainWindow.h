@@ -15,6 +15,8 @@
 #include <QEvent>
 #include <QWheelEvent>
 #include <unordered_map>
+#include <unordered_set>
+#include <chrono>
 #include <cstdint>
 
 class ICommandSender;
@@ -28,6 +30,8 @@ class TestStateReceiver;
 class StressTestReceiver;
 class TelemetrySparkline;
 struct StressPreset;
+struct DroneState;
+struct DroneCmd;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -39,6 +43,10 @@ public:
                         IFormationChecker* formationChecker,
                         QWidget* parent = nullptr);
     ~MainWindow() override;
+
+    // Called in the UI thread when a fresh state sample reaches the controller.
+    // This keeps arrival timestamps tied to receipt time, rather than to UI refresh.
+    void observeStateForQuality(const DroneState& state);
 
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
@@ -66,6 +74,7 @@ private:
     void updateStressStats();
     void updateCommunicationTelemetry();
     void updateQualityMetrics();
+    bool beginQualityTracking(const DroneCmd& cmd);
 
     ICommandSender*    m_cmdSender;
     IStateReceiver*    m_stateReceiver;
@@ -111,5 +120,13 @@ private:
     QTimer* m_telemetryTimer;
 
     std::unordered_map<uint32_t, DroneItem*> m_droneItems;
+    struct TargetSlot {
+        double x = 0.0;
+        double y = 0.0;
+    };
+    std::unordered_map<uint32_t, TargetSlot> m_qualityTargets;
+    std::unordered_map<uint32_t, std::chrono::steady_clock::time_point> m_arrivalTimes;
+    uint32_t m_qualityCmdId = 0;
+    bool m_qualityTracking = false;
     bool m_formationCompleted = false;
 };
