@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../Algorithm/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../Algorithm/Formations)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../Algorithm/Math)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -45,6 +48,12 @@ add_executable(QtDemo
     "test/StressTestReceiver.h"
     "test/StressTestReceiver.cpp"
     "test/TestPresets.h"
+    "../../Algorithm/FormationAlgorithm.cpp"
+    "../../Algorithm/Math/GeometryUtils.cpp"
+    "../../Algorithm/Formations/HersheyFont.cpp"
+    "../../Algorithm/Formations/PresetFormations.cpp"
+    "../../Algorithm/Formations/TextFormation.cpp"
+    "../../Algorithm/Formations/TextRasterizerWin.cpp"
 )
 
 target_link_libraries(QtDemo

@@ -194,16 +194,17 @@ int main(int argc, char* argv[]) {
     DroneStateCache stateCache;
     FormationChecker formationChecker;
 
-    // ========== 新增这一行：把状态接收器和状态缓存打通 ==========
+    MainWindow w(&realCmdSender, &realStateReceiver, &stateCache, &formationChecker);
+
+    // 状态在 Qt UI 线程回调：同步更新缓存，并在收到样本的时刻记录质量指标。
     realStateReceiver.setOnStateReceived(
         [&](const DroneState& state) {
             stateCache.updateState(state);
             formationChecker.updateDroneCmdId(state.drone_id, state.current_cmd_id);
             formationChecker.updateDroneStatus(state.drone_id, state.status);
+            w.observeStateForQuality(state);
         }
     );
-
-    MainWindow w(&realCmdSender, &realStateReceiver, &stateCache, &formationChecker);
 
     // 启动后台接收
     realStateReceiver.start();

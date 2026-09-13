@@ -5,6 +5,19 @@
 #include "core/IFormationChecker.h"
 #include "core/DroneCmd.h"
 #include "core/DroneState.h"
+// Qt defines a `slots` macro for signal/slot declarations. B's public
+// FormationResult has a member with the same name, so suspend the Qt macro
+// only while parsing B's contract, then restore it for the remaining Qt headers.
+#ifdef slots
+#pragma push_macro("slots")
+#undef slots
+#define RESTORE_QT_SLOTS_MACRO
+#endif
+#include "FormationAlgorithm.h"
+#ifdef RESTORE_QT_SLOTS_MACRO
+#pragma pop_macro("slots")
+#undef RESTORE_QT_SLOTS_MACRO
+#endif
 #include "render/DroneItem.h"
 #include "render/ColorConfig.h"
 #include "render/CoordinateMapper.h"
@@ -27,6 +40,16 @@
 #include <limits>
 #include <unordered_set>
 
+namespace {
+constexpr double kArrivalThresholdMeters = 1.0;
+
+QString metricStyle(bool alert = false) {
+    return alert
+        ? "QLabel{background:#3b2427;color:#ffb4a8;border:1px solid #914447;border-radius:4px;padding:5px 6px;font-weight:600;font-size:14px;}"
+        : "QLabel{background:#14242f;color:#d9f9f5;border:1px solid #294452;border-radius:4px;padding:5px 6px;font-weight:600;font-size:14px;}";
+}
+}
+
 MainWindow::MainWindow(ICommandSender* cmdSender,
                        IStateReceiver* stateReceiver,
                        IDroneStateCache* stateCache,
@@ -48,6 +71,7 @@ MainWindow::MainWindow(ICommandSender* cmdSender,
         m_stateCache->updateState(state);
         m_formationChecker->updateDroneCmdId(state.drone_id, state.current_cmd_id);
         m_formationChecker->updateDroneStatus(state.drone_id, state.status);
+        observeStateForQuality(state);
     });
     m_testReceiver->setOnDroneRemoved([this](uint32_t droneId) {
         m_stateCache->removeState(droneId);
@@ -58,6 +82,7 @@ MainWindow::MainWindow(ICommandSender* cmdSender,
         m_stateCache->updateState(state);
         m_formationChecker->updateDroneCmdId(state.drone_id, state.current_cmd_id);
         m_formationChecker->updateDroneStatus(state.drone_id, state.status);
+        observeStateForQuality(state);
     });
     m_stressReceiver->setOnDroneRemoved([this](uint32_t droneId) {
         m_stateCache->removeState(droneId);
@@ -270,7 +295,11 @@ void MainWindow::onTakeoff() {
     printf("[DEBUG] MainWindow发送前 内容: [%s]\n", cmd.formation_text.c_str());
     // ==========================================
 
-    m_cmdSender->sendCommand(cmd);
+    if (!m_cmdSender->sendCommand(cmd)) {
+        statusBar()->showMessage("起飞命令发送失败");
+        return;
+    }
+    beginQualityTracking(cmd);
 
 
 
@@ -305,7 +334,13 @@ void MainWindow::onFormation() {
     printf("[DEBUG] MainWindow发送前 内容: [%s]\n", cmd.formation_text.c_str());
     // ==========================================
 
-    m_cmdSender->sendCommand(cmd);
+    if (!m_cmdSender->sendCommand(cmd)) {
+        statusBar()->showMessage("队形命令发送失败");
+        return;
+    }
+    if (!beginQualityTracking(cmd)) {
+        statusBar()->showMessage("队形命令已发送，但目标槽位计算失败");
+    }
 
 
 
@@ -515,11 +550,11 @@ void MainWindow::setupQualityPanel(QWidget* panel) {
     addMetric("当前最小机间距", m_lblMinDistance,
               "每秒根据主控已接收的位置，计算任意两架无人机的最小欧氏距离。");
     addMetric("同步到达误差", m_lblSyncError,
-              "需 C 模块提供每架机的到达事件或到达时间，当前协议尚未携带该数据。");
+               "主控记录每架机首次进入目标槽位 1.00 m 阈值的接收时间；显示最早与最晚到达的时间差。");
     addMetric("队形收敛残差", m_lblFormationResidual,
-              "需 C/B 提供最终目标槽位，当前主控仅有实际位置，不能可靠计算。");
+               "主控使用 B 模块的目标槽位，计算实际位置到各自目标槽位的平均欧氏距离。");
 
-    QLabel* hint = new QLabel("展示阈值：1.50 m；低于阈值仅告警，不干预避障。", group);
+    QLabel* hint = new QLabel("安全阈值：1.50 m；到达阈值：1.00 m。仅展示，不干预避障。", group);
     hint->setWordWrap(true);
     hint->setStyleSheet("QLabel{color:#9a7445;font-size:10px;}");
     layout->addWidget(hint);
@@ -661,8 +696,8 @@ void MainWindow::updateQualityMetrics() {
     const std::vector<DroneState> states = m_stateCache->getAllStates();
     if (states.size() < 2) {
         m_lblMinDistance->setText("—");
-        m_lblSyncError->setText("待接入");
-        m_lblFormationResidual->setText("待接入");
+        m_lblSyncError->setText(m_qualityTracking ? "等待状态" : "等待队形命令");
+        m_lblFormationResidual->setText(m_qualityTracking ? "等待状态" : "等待队形命令");
         return;
     }
 
@@ -675,12 +710,102 @@ void MainWindow::updateQualityMetrics() {
         }
     }
 
-    const QString normalStyle = "QLabel{background:#14242f;color:#d9f9f5;border:1px solid #294452;border-radius:4px;padding:5px 6px;font-weight:600;font-size:14px;}";
-    const QString alertStyle = "QLabel{background:#3b2427;color:#ffb4a8;border:1px solid #914447;border-radius:4px;padding:5px 6px;font-weight:600;font-size:14px;}";
     m_lblMinDistance->setText(QString::number(minDistance, 'f', 2) + " m");
-    m_lblMinDistance->setStyleSheet(minDistance < 1.50 ? alertStyle : normalStyle);
-    m_lblSyncError->setText("待 C 到达事件");
-    m_lblFormationResidual->setText("待目标槽位");
+    m_lblMinDistance->setStyleSheet(metricStyle(minDistance < 1.50));
+
+    if (!m_qualityTracking || m_qualityTargets.empty()) {
+        m_lblSyncError->setText("等待队形命令");
+        m_lblFormationResidual->setText("等待队形命令");
+        return;
+    }
+
+    double totalResidual = 0.0;
+    uint32_t matchedCount = 0;
+    for (const DroneState& state : states) {
+        const auto target = m_qualityTargets.find(state.drone_id);
+        if (target == m_qualityTargets.end()) continue;
+        const double dx = state.x - target->second.x;
+        const double dy = state.y - target->second.y;
+        totalResidual += std::sqrt(dx * dx + dy * dy);
+        ++matchedCount;
+    }
+
+    if (matchedCount == 0) {
+        m_lblFormationResidual->setText("等待匹配状态");
+    } else {
+        const double averageResidual = totalResidual / matchedCount;
+        m_lblFormationResidual->setText(QString::number(averageResidual, 'f', 2) + " m (平均)");
+        m_lblFormationResidual->setStyleSheet(metricStyle(averageResidual > kArrivalThresholdMeters));
+    }
+
+    const uint32_t expectedCount = static_cast<uint32_t>(m_qualityTargets.size());
+    if (m_arrivalTimes.size() < expectedCount) {
+        m_lblSyncError->setText(QString("到达 %1/%2").arg(m_arrivalTimes.size()).arg(expectedCount));
+        m_lblSyncError->setStyleSheet(metricStyle());
+        return;
+    }
+
+    auto earliest = m_arrivalTimes.begin()->second;
+    auto latest = earliest;
+    for (const auto& arrival : m_arrivalTimes) {
+        earliest = std::min(earliest, arrival.second);
+        latest = std::max(latest, arrival.second);
+    }
+    const double syncError = std::chrono::duration<double>(latest - earliest).count();
+    m_lblSyncError->setText(QString::number(syncError, 'f', 2) + " s");
+    m_lblSyncError->setStyleSheet(metricStyle());
+}
+
+bool MainWindow::beginQualityTracking(const DroneCmd& cmd) {
+    SwarmFormation::FormationRequest request;
+    request.formation_id = (cmd.cmd_type == DroneCmdType::CMD_TAKEOFF && cmd.formation_id == 0)
+        ? 0 : cmd.formation_id;
+    request.formation_text = cmd.formation_text;
+    request.count = cmd.expected_count;
+    request.center_x = cmd.target_x;
+    request.center_y = cmd.target_y;
+    request.spacing = cmd.spacing;
+
+    const SwarmFormation::FormationResult result = SwarmFormation::GenerateSlots(request);
+    if (!result.success) {
+        m_qualityTargets.clear();
+        m_arrivalTimes.clear();
+        m_qualityTracking = false;
+        std::cerr << "[Quality] 目标槽位计算失败: "
+                  << SwarmFormation::FormationErrorMessage(result.error) << std::endl;
+        return false;
+    }
+
+    m_qualityTargets.clear();
+    for (uint32_t index = 0; index < request.count; ++index) {
+        // C 模块的约定：drone_id 1..N 对应 B 算法的 slot index 0..N-1。
+        SwarmFormation::Point2D slot;
+        if (!SwarmFormation::GetSlot(result, index, slot)) {
+            m_qualityTargets.clear();
+            m_arrivalTimes.clear();
+            m_qualityTracking = false;
+            std::cerr << "[Quality] 读取目标槽位失败，index=" << index << std::endl;
+            return false;
+        }
+        m_qualityTargets.emplace(index + 1, TargetSlot{slot.x, slot.y});
+    }
+    m_arrivalTimes.clear();
+    m_qualityCmdId = cmd.cmd_id;
+    m_qualityTracking = true;
+    return true;
+}
+
+void MainWindow::observeStateForQuality(const DroneState& state) {
+    if (!m_qualityTracking || state.current_cmd_id != m_qualityCmdId) return;
+
+    const auto target = m_qualityTargets.find(state.drone_id);
+    if (target == m_qualityTargets.end() || m_arrivalTimes.count(state.drone_id) != 0) return;
+
+    const double dx = state.x - target->second.x;
+    const double dy = state.y - target->second.y;
+    if (std::sqrt(dx * dx + dy * dy) <= kArrivalThresholdMeters) {
+        m_arrivalTimes.emplace(state.drone_id, std::chrono::steady_clock::now());
+    }
 }
 
 bool MainWindow::eventFilter(QObject* obj, QEvent* event) {
