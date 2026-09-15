@@ -41,12 +41,15 @@
 #include <unordered_set>
 
 namespace {
-constexpr double kArrivalThresholdMeters = 1.0;
+// Keep the receipt-side arrival statistic consistent with C's current
+// 0.10 m control deadband.  This is deliberately an internal threshold:
+// the UI presents the resulting metric rather than a second control setting.
+constexpr double kArrivalThresholdMeters = 0.10;
 
 QString metricStyle(bool alert = false) {
     return alert
-        ? "QLabel{background:#3b2427;color:#ffb4a8;border:1px solid #914447;border-radius:4px;padding:5px 6px;font-weight:600;font-size:14px;}"
-        : "QLabel{background:#14242f;color:#d9f9f5;border:1px solid #294452;border-radius:4px;padding:5px 6px;font-weight:600;font-size:14px;}";
+        ? "QLabel{background:#3b2427;color:#ffb4a8;border:1px solid #914447;border-radius:5px;padding:7px 8px;font-weight:600;font-size:17px;}"
+        : "QLabel{background:#14242f;color:#d9f9f5;border:1px solid #294452;border-radius:5px;padding:7px 8px;font-weight:600;font-size:17px;}";
 }
 }
 
@@ -63,7 +66,7 @@ MainWindow::MainWindow(ICommandSender* cmdSender,
     , m_formationChecker(formationChecker)
 {
     setWindowTitle("无人机编队主控端");
-    resize(1000, 700);
+    resize(1160, 760);
 
     m_testReceiver = new TestStateReceiver(this);
     m_testReceiver->setDroneCount(8);
@@ -140,7 +143,7 @@ void MainWindow::setupUi() {
     mainLayout->addWidget(m_graphicsView, 1);
 
     QWidget* rightPanel = new QWidget();
-    rightPanel->setFixedWidth(270);
+    rightPanel->setFixedWidth(330);
     QVBoxLayout* rightLayout = new QVBoxLayout(rightPanel);
     rightLayout->setContentsMargins(0, 0, 0, 0);
     setupTelemetryPanel(rightPanel);
@@ -483,17 +486,17 @@ void MainWindow::setupTelemetryPanel(QWidget* panel) {
     QGroupBox* group = new QGroupBox("通信性能", panel);
     group->setToolTip("统计 DroneState 的 DDS 业务数据，不含 DDS/UDP/IP 协议头和发现流量。");
     QVBoxLayout* layout = new QVBoxLayout(group);
-    layout->setSpacing(8);
+    layout->setSpacing(10);
 
     QLabel* subtitle = new QLabel("实时 DDS 业务载荷（每秒窗口）", group);
-    subtitle->setStyleSheet("QLabel{color:#6e8494;font-size:11px;}");
+    subtitle->setStyleSheet("QLabel{color:#6e8494;font-size:13px;}");
     layout->addWidget(subtitle);
 
     QGridLayout* metrics = new QGridLayout();
-    metrics->setHorizontalSpacing(8);
-    metrics->setVerticalSpacing(7);
-    const QString valueStyle = "QLabel{background:#14242f;color:#d9f9f5;border:1px solid #294452;border-radius:4px;padding:5px 6px;font-weight:600;font-size:14px;}";
-    const QString labelStyle = "QLabel{color:#7f96a6;font-size:11px;}";
+    metrics->setHorizontalSpacing(10);
+    metrics->setVerticalSpacing(10);
+    const QString valueStyle = "QLabel{background:#14242f;color:#d9f9f5;border:1px solid #294452;border-radius:5px;padding:7px 8px;font-weight:600;font-size:17px;}";
+    const QString labelStyle = "QLabel{color:#7f96a6;font-size:13px;}";
     auto addMetric = [&](int row, const QString& label, QLabel*& value, const QString& tooltip) {
         QLabel* name = new QLabel(label, group);
         name->setStyleSheet(labelStyle);
@@ -507,15 +510,14 @@ void MainWindow::setupTelemetryPanel(QWidget* panel) {
     };
     addMetric(0, "状态消息", m_lblMessageRate, "本秒收到的 DroneState 条目数。");
     addMetric(1, "业务吞吐", m_lblThroughput, "本秒 CDR 业务载荷，单位 kbit/s。协议头和发现流量不计入。");
-    addMetric(2, "序列缺失", m_lblSequenceGaps, "根据同一无人机 seq_num 推断的缺失状态条目数。");
-    addMetric(3, "乱序样本", m_lblOutOfOrder, "seq_num 小于或等于上一条状态时计为乱序或重复。");
     layout->addLayout(metrics);
 
     QLabel* chartTitle = new QLabel("吞吐趋势 · 最近 45 秒（kbit/s）", group);
-    chartTitle->setStyleSheet("QLabel{color:#7f96a6;font-size:11px;margin-top:4px;}");
+    chartTitle->setStyleSheet("QLabel{color:#7f96a6;font-size:13px;margin-top:6px;}");
     layout->addWidget(chartTitle);
     m_telemetrySparkline = new TelemetrySparkline(group);
     m_telemetrySparkline->setToolTip("青色曲线表示最近 45 个一秒窗口的业务吞吐量。");
+    m_telemetrySparkline->setFixedHeight(150);
     layout->addWidget(m_telemetrySparkline);
 
     QVBoxLayout* panelLayout = qobject_cast<QVBoxLayout*>(panel->layout());
@@ -526,14 +528,14 @@ void MainWindow::setupQualityPanel(QWidget* panel) {
     QGroupBox* group = new QGroupBox("集群质量分析", panel);
     group->setToolTip("主控端基于已接收的实时状态计算。安全阈值仅用于展示，不参与 B 模块避障决策。");
     QVBoxLayout* layout = new QVBoxLayout(group);
-    layout->setSpacing(6);
+    layout->setSpacing(10);
 
     QLabel* subtitle = new QLabel("主控状态几何统计", group);
-    subtitle->setStyleSheet("QLabel{color:#6e8494;font-size:11px;}");
+    subtitle->setStyleSheet("QLabel{color:#6e8494;font-size:13px;}");
     layout->addWidget(subtitle);
 
-    const QString labelStyle = "QLabel{color:#7f96a6;font-size:11px;}";
-    const QString valueStyle = "QLabel{background:#14242f;color:#d9f9f5;border:1px solid #294452;border-radius:4px;padding:5px 6px;font-weight:600;font-size:14px;}";
+    const QString labelStyle = "QLabel{color:#7f96a6;font-size:13px;}";
+    const QString valueStyle = "QLabel{background:#14242f;color:#d9f9f5;border:1px solid #294452;border-radius:5px;padding:7px 8px;font-weight:600;font-size:17px;}";
     auto addMetric = [&](const QString& label, QLabel*& value, const QString& tooltip) {
         QHBoxLayout* row = new QHBoxLayout();
         QLabel* name = new QLabel(label, group);
@@ -550,14 +552,9 @@ void MainWindow::setupQualityPanel(QWidget* panel) {
     addMetric("当前最小机间距", m_lblMinDistance,
               "每秒根据主控已接收的位置，计算任意两架无人机的最小欧氏距离。");
     addMetric("同步到达误差", m_lblSyncError,
-               "主控记录每架机首次进入目标槽位 1.00 m 阈值的接收时间；显示最早与最晚到达的时间差。");
+               "主控记录每架机首次进入目标槽位的接收时间；显示最早与最晚到达的时间差。");
     addMetric("队形收敛残差", m_lblFormationResidual,
-               "主控使用 B 模块的目标槽位，计算实际位置到各自目标槽位的平均欧氏距离。");
-
-    QLabel* hint = new QLabel("安全阈值：1.50 m；到达阈值：1.00 m。仅展示，不干预避障。", group);
-    hint->setWordWrap(true);
-    hint->setStyleSheet("QLabel{color:#9a7445;font-size:10px;}");
-    layout->addWidget(hint);
+              "主控使用 B 模块的目标槽位，计算实际位置到各自目标槽位的平均欧氏距离。");
 
     QVBoxLayout* panelLayout = qobject_cast<QVBoxLayout*>(panel->layout());
     if (panelLayout) panelLayout->addWidget(group);
@@ -673,8 +670,6 @@ void MainWindow::updateCommunicationTelemetry() {
     if (!telemetry.available) {
         m_lblMessageRate->setText("—");
         m_lblThroughput->setText("—");
-        m_lblSequenceGaps->setText("—");
-        m_lblOutOfOrder->setText("—");
         return;
     }
 
@@ -682,14 +677,7 @@ void MainWindow::updateCommunicationTelemetry() {
     const double kbitPerSecond = static_cast<double>(telemetry.payloadBytesPerSecond * 8ULL) / 1000.0;
     m_lblMessageRate->setText(locale.toString(static_cast<qulonglong>(telemetry.stateSamplesPerSecond)) + " /s");
     m_lblThroughput->setText(locale.toString(kbitPerSecond, 'f', 2) + " kbit/s");
-    m_lblSequenceGaps->setText(locale.toString(static_cast<qulonglong>(telemetry.sequenceGaps)));
-    m_lblOutOfOrder->setText(locale.toString(static_cast<qulonglong>(telemetry.outOfOrderSamples)));
     m_telemetrySparkline->appendSample(kbitPerSecond);
-
-    const QString normalStyle = "QLabel{background:#14242f;color:#d9f9f5;border:1px solid #294452;border-radius:4px;padding:5px 6px;font-weight:600;font-size:14px;}";
-    const QString alertStyle = "QLabel{background:#3b2427;color:#ffb4a8;border:1px solid #914447;border-radius:4px;padding:5px 6px;font-weight:600;font-size:14px;}";
-    m_lblSequenceGaps->setStyleSheet(telemetry.sequenceGaps == 0 ? normalStyle : alertStyle);
-    m_lblOutOfOrder->setStyleSheet(telemetry.outOfOrderSamples == 0 ? normalStyle : alertStyle);
 }
 
 void MainWindow::updateQualityMetrics() {
