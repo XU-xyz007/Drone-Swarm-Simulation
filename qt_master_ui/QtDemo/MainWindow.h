@@ -14,10 +14,13 @@
 #include <QCheckBox>
 #include <QEvent>
 #include <QWheelEvent>
+#include "core/DroneState.h"
 #include <unordered_map>
 #include <unordered_set>
 #include <chrono>
 #include <cstdint>
+#include <string>
+#include <vector>
 
 class ICommandSender;
 class IStateReceiver;
@@ -30,7 +33,6 @@ class TestStateReceiver;
 class StressTestReceiver;
 class TelemetrySparkline;
 struct StressPreset;
-struct DroneState;
 struct DroneCmd;
 
 class MainWindow : public QMainWindow {
@@ -47,6 +49,10 @@ public:
     // Called in the UI thread when a fresh state sample reaches the controller.
     // This keeps arrival timestamps tied to receipt time, rather than to UI refresh.
     void observeStateForQuality(const DroneState& state);
+
+    // Called after the DDS adapter receives a failover report from a surviving drone.
+    // The quality panel must then follow C's new alive-ID-to-slot mapping.
+    void handleDroneLost(uint32_t droneId);
 
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
@@ -74,7 +80,9 @@ private:
     void updateStressStats();
     void updateCommunicationTelemetry();
     void updateQualityMetrics();
+    void detectTimedOutDrones();
     bool beginQualityTracking(const DroneCmd& cmd);
+    bool rebuildQualityTargets();
 
     ICommandSender*    m_cmdSender;
     IStateReceiver*    m_stateReceiver;
@@ -122,8 +130,23 @@ private:
         double x = 0.0;
         double y = 0.0;
     };
+    struct QualityPlan {
+        uint32_t formationId = 0;
+        std::string formationText;
+        double centerX = 0.0;
+        double centerY = 0.0;
+        double spacing = 0.0;
+    };
+    struct LastSeenState {
+        std::chrono::steady_clock::time_point receivedAt;
+        DroneStatus status = DroneStatus::ST_IDLE;
+    };
     std::unordered_map<uint32_t, TargetSlot> m_qualityTargets;
     std::unordered_map<uint32_t, std::chrono::steady_clock::time_point> m_arrivalTimes;
+    std::unordered_map<uint32_t, LastSeenState> m_lastSeenStates;
+    std::vector<uint32_t> m_qualityActiveDroneIds;
+    std::unordered_set<uint32_t> m_lostDroneIds;
+    QualityPlan m_qualityPlan;
     uint32_t m_qualityCmdId = 0;
     bool m_qualityTracking = false;
     bool m_formationCompleted = false;

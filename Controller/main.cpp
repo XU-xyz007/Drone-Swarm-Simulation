@@ -7,6 +7,7 @@
 #include <cstring>
 #include <map>
 #include <mutex>
+#include <unordered_set>
 #include <windows.h>
 
 
@@ -127,20 +128,34 @@ public:
         // 订阅底层状态，回调参数是 SharedMessage 命名空间下的类型
         SwarmComm::SubscribeState([this](const SharedMessage::DroneState& ddsState) {
             telemetry_.record(ddsState);
+            DroneState state;
+            state.drone_id = ddsState.drone_id;
+            state.x = ddsState.x;
+            state.y = ddsState.y;
+            state.vx = ddsState.vx;
+            state.vy = ddsState.vy;
+            state.status = static_cast<DroneStatus>(ddsState.status);
+            state.current_cmd_id = ddsState.current_cmd_id;
+            state.seq_num = ddsState.seq_num;
+            state.transitioning = false;
+
+            const DDS_ULong lostCount = DDS_ULongSeq_get_length(&ddsState.suspected_lost_ids);
+            for (DDS_ULong index = 0; index < lostCount; ++index) {
+                const DDS_ULong* lostId = DDS_ULongSeq_get_reference(
+                    &ddsState.suspected_lost_ids, index);
+                if (lostId != nullptr && *lostId != state.drone_id) {
+                    state.suspected_lost_ids.push_back(*lostId);
+                }
+            }
+
             // 跨线程抛到 UI 主线程
-            QMetaObject::invokeMethod(qApp, [this, ddsState]() {
+            QMetaObject::invokeMethod(qApp, [this, state]() {
+                for (uint32_t lostId : state.suspected_lost_ids) {
+                    if (m_reportedLostIds.insert(lostId).second && m_onDroneRemoved) {
+                        m_onDroneRemoved(lostId);
+                    }
+                }
                 if (m_onStateReceived) {
-                    // 类型转换：转回基类接口使用的全局类型
-                    DroneState state;
-                    state.drone_id = ddsState.drone_id;
-                    state.x = ddsState.x;
-                    state.y = ddsState.y;
-                    state.vx = ddsState.vx;
-                    state.vy = ddsState.vy;
-                    state.status = static_cast<DroneStatus>(ddsState.status);
-                    state.current_cmd_id = ddsState.current_cmd_id;
-                    state.seq_num = ddsState.seq_num;
-                    state.transitioning = false; // DDS没传，业务层自己给默认值
                     m_onStateReceived(state);
                 }
                 }, Qt::QueuedConnection);
@@ -160,6 +175,7 @@ private:
     std::function<void(const DroneState&)> m_onStateReceived;
     std::function<void(uint32_t)> m_onDroneRemoved;
     uint32_t m_latestCmdId = 0;
+    std::unordered_set<uint32_t> m_reportedLostIds;
     DdsTelemetry telemetry_;
 };
 
@@ -203,6 +219,12 @@ int main(int argc, char* argv[]) {
             formationChecker.updateDroneCmdId(state.drone_id, state.current_cmd_id);
             formationChecker.updateDroneStatus(state.drone_id, state.status);
             w.observeStateForQuality(state);
+        }
+    );
+    realStateReceiver.setOnDroneRemoved(
+        [&](uint32_t droneId) {
+            stateCache.removeState(droneId);
+            w.handleDroneLost(droneId);
         }
     );
 
