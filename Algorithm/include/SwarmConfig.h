@@ -1,26 +1,26 @@
-#pragma once
+ï»¿#pragma once
 #include <cstdint>
 
-// Í³Ò»µÄ¼¯Èº V2 ÅäÖÃÎÄ¼ş
+// ç»Ÿä¸€çš„é›†ç¾¤ V2 é…ç½®æ–‡ä»¶
 struct V2Config {
 
     // ==========================================
-    // C¡¢B Ä£¿é¹²ÏíµÄÎïÀí²ÎÊı (B Ä£¿éÖ»¶ÁÕâ²¿·Ö)
+    // Cã€B æ¨¡å—å…±äº«çš„ç‰©ç†å‚æ•° (B æ¨¡å—åªè¯»è¿™éƒ¨åˆ†)
     // ==========================================
     struct DynamicsLimits2D {
-        double v_max = 5.0;      // ÊÊÅä 5 Ã×²ÛÎ»¼ä¾àµÄ×î¸ßËÙ¶È
-        double a_max_acc = 3.0;  // ¼ÓËÙ¶ÈÏŞÖÆ
-        double a_max_dec = 5.0;  // ¼õËÙ¶ÈÏŞÖÆ
-        double a_max_lat = 4.0;  // ºáÏò»ú¶¯ÏŞÖÆ
+        double v_max = 5.0;      // é€‚é… 5 ç±³æ§½ä½é—´è·çš„æœ€é«˜é€Ÿåº¦
+        double a_max_acc = 3.0;  // åŠ é€Ÿåº¦é™åˆ¶
+        double a_max_dec = 5.0;  // å‡é€Ÿåº¦é™åˆ¶
+        double a_max_lat = 4.0;  // æ¨ªå‘æœºåŠ¨é™åˆ¶
     } dynamics_limits_2d;
 
     struct AvoidanceParams {
-        double drone_radius = 0.5;   // ÎŞÈË»úÕæÊµÎïÀí°ë¾¶
-        double safety_margin = 1.0;  // »ù´¡°²È«ÓàÁ¿ (ÅäºÏ°ë¾¶ÍÆËã¼«ÏŞ»¤¶Ü)
+        double drone_radius = 0.5;   // æ— äººæœºçœŸå®ç‰©ç†åŠå¾„
+        double safety_margin = 1.0;  // åŸºç¡€å®‰å…¨ä½™é‡ (é…åˆåŠå¾„æ¨ç®—æé™æŠ¤ç›¾)
     } avoidance_params;
 
     // ==========================================
-    // C Ä£¿é×¨ÓÃµÄÒµÎñ²ÎÊı (B Ä£¿é²»ĞèÒª¹ØĞÄ)
+    // C æ¨¡å—ä¸“ç”¨çš„ä¸šåŠ¡å‚æ•° (B æ¨¡å—ä¸éœ€è¦å…³å¿ƒ)
     // ==========================================
     struct Kinematics {
         double v_avg_cruise = 1.5;
@@ -29,7 +29,7 @@ struct V2Config {
 
     struct ControlGains {
         double kp_tracking = 0.8;
-        double deadband_radius = 0.1; // Õë¶Ô´ó³ß¶È£¬ËÀÇø·Å¿íµ½ 10 ÀåÃ×
+        double deadband_radius = 0.1; // é’ˆå¯¹å¤§å°ºåº¦ï¼Œæ­»åŒºæ”¾å®½åˆ° 10 å˜ç±³
     } control_gains;
 
     struct Telemetry {
