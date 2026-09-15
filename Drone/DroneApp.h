@@ -67,6 +67,7 @@ private:
     double current_center_x_ = 0.0;
     double current_center_y_ = 0.0;
     double current_spacing_ = 2.0;
+    std::string current_formation_text_ = "";
 
     std::vector<unsigned long> confirmed_dead_; // 记录已确认阵亡的名单
 }; 
