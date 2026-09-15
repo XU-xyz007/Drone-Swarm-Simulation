@@ -133,6 +133,8 @@ copy /Y "$(ZRDDS_HOME)\lib\ZRDDSCppd_VS2015.dll" "$(OutDir)"</Command>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\Algorithm\CollisionAvoidance\CollisionAvoidance.cpp" />
+    <ClCompile Include="..\Algorithm\CollisionAvoidance\CollisionPrediction.cpp" />
     <ClCompile Include="..\Algorithm\FormationAlgorithm.cpp" />
     <ClCompile Include="..\Algorithm\Math\GeometryUtils.cpp" />
     <ClCompile Include="..\Algorithm\Formations\HersheyFont.cpp" />
@@ -160,6 +162,7 @@ copy /Y "$(ZRDDS_HOME)\lib\ZRDDSCppd_VS2015.dll" "$(OutDir)"</Command>
     <ClInclude Include="..\SharedMessage\gen_code\DroneMessageDataWriter.h" />
     <ClInclude Include="..\SharedMessage\gen_code\DroneMessageTypeSupport.h" />
     <ClInclude Include="DroneApp.h" />
+    <ClInclude Include="SwarmConfig.h" />
     <ClInclude Include="SwarmControlCModule.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

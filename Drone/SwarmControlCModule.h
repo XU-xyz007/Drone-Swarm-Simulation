@@ -1,10 +1,10 @@
 #pragma once
-#pragma once
 
 #include <cstdint>
 #include <vector>
 #include <unordered_map>
 #include <cmath>
+#include "SwarmConfig.h"
 
 // ============================================================================
 // 数据结构契约定义 (已改名为 V2DroneStatus，彻底杜绝底层冲突)
@@ -15,6 +15,21 @@ enum class V2DroneStatus : uint32_t {
     ST_HOVER,
     ST_IN_TRANSIT,
     ST_FALLBACK_CATCHING
+};
+
+enum class NeighborMotionState {
+    Unknown = 0,
+    Moving,
+    Arrived
+};
+
+struct BModuleNeighbor {
+    uint32_t drone_id;
+    double x;
+    double y;
+    double vx;
+    double vy;
+    NeighborMotionState motion_state; // 满足 B 模块的第五条需求
 };
 
 struct DroneStateDDS {
@@ -51,7 +66,7 @@ struct C_to_B_Request {
     double final_target_x;
     double final_target_y;
     double distance_to_target;
-    std::vector<NeighborState> neighbors;
+    std::vector<BModuleNeighbor> neighbors;
 };
 
 struct B_to_C_Response {
@@ -60,34 +75,6 @@ struct B_to_C_Response {
     double safe_vy;
 };
 
-struct V2Config {
-    struct Kinematics {
-        double v_avg_cruise = 1.5;
-        double t_min_duration = 2.0;
-    } kinematics;
-
-    struct DynamicsLimits2D {
-        double v_max = 50.0;      // [修改] 极速提升至 50.0 m/s (约 180 km/h)
-        double a_max_acc = 15.0;  // [修改] 推背感拉满，加速极快
-        double a_max_dec = 30.0;  // [修改] 强力制动，高速下必须有极大的负加速度兜底
-        double a_max_lat = 15.0;  // [修改] 侧向避障机动能力同步拉满
-    } dynamics_limits_2d;
-
-    struct ControlGains {
-        double kp_tracking = 0.8;
-        double deadband_radius = 0.1; // [修改] 针对大尺度，死区可适当放宽到 10 厘米
-    } control_gains;
-
-    struct Telemetry {
-        double active_pub_rate_hz = 10.0;
-        double static_pub_rate_hz = 1.0;
-    } telemetry;
-
-    struct FailoverQuorum {
-        uint32_t max_missed_packets = 3;
-        uint32_t n_total_expected = 100;
-    } failover_quorum;
-};
 
 class SwarmControlCModule {
 public:
@@ -102,7 +89,6 @@ private:
     std::vector<uint32_t> CheckLostNeighbors(double current_time_sec);
     void GenerateIntent(double& ivx, double& ivy);
     C_to_B_Request BuildBModuleRequest(double dt, double ivx, double ivy);
-    B_to_C_Response MockBModuleCollisionAvoidance(const C_to_B_Request& req);
     void ApplyDynamics(double safe_vx, double safe_vy, double dt);
     DroneStateDDS GenerateTelemetry(const std::vector<uint32_t>& suspected_ids);
 
