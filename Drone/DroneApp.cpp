@@ -33,6 +33,31 @@ void DroneApp::Stop() {
     PublishCurrentState();
 }
 
+void DroneApp::BeginLanding() {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    if (!running_ || landing_) return;
+
+    // This project is two-dimensional: a landing is represented by holding
+    // position, publishing ST_LANDED briefly for the UI, then ending the app.
+    landing_ = true;
+    landing_started_at_ = std::chrono::steady_clock::now();
+    target_x_ = cur_x_;
+    target_y_ = cur_y_;
+    cur_vx_ = 0.0;
+    cur_vy_ = 0.0;
+    is_moving_ = false;
+    current_status_ = SharedMessage::ST_LANDED;
+    if (c_module_) c_module_->SetTarget(cur_x_, cur_y_);
+}
+
+void DroneApp::CancelLanding() {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    if (!running_ || !landing_) return;
+
+    landing_ = false;
+    current_status_ = SharedMessage::ST_HOVER;
+}
+
 void DroneApp::OnStateReceived(const SharedMessage::DroneState& state) {
     if (state.drone_id == drone_id_) return;
 
@@ -75,6 +100,14 @@ void DroneApp::OnCommandReceived(const SharedMessage::DroneCmd& cmd) {
         current_center_x_ = cmd.target_x;
         current_center_y_ = cmd.target_y;
         current_spacing_ = cmd.spacing > 0.0 ? cmd.spacing : 2.0;
+        active_expected_count_ = cmd.expected_count;
+
+        // A planned scale-down removes the high IDs from this formation. Keep
+        // old failover observations for active IDs only.
+        confirmed_dead_.erase(
+            std::remove_if(confirmed_dead_.begin(), confirmed_dead_.end(),
+                           [this](unsigned long id) { return id > active_expected_count_; }),
+            confirmed_dead_.end());
 
         // 2. 【核心修复】梳理存活名单（绝对不能用通信缓存！）
         std::vector<unsigned long> alive_ids;
@@ -103,12 +136,16 @@ void DroneApp::OnCommandReceived(const SharedMessage::DroneCmd& cmd) {
         break;
     }
     case SharedMessage::CMD_LAND: {
+        // Avoid calling BeginLanding here: state_mutex_ is already held.
+        landing_ = true;
+        landing_started_at_ = std::chrono::steady_clock::now();
         target_x_ = cur_x_;
         target_y_ = cur_y_;
         is_moving_ = false;
         cur_vx_ = 0.0;
         cur_vy_ = 0.0;
         current_status_ = SharedMessage::ST_LANDED;
+        if (c_module_) c_module_->SetTarget(cur_x_, cur_y_);
         break;
     }
     default:
@@ -137,7 +174,14 @@ void DroneApp::RunLoop() {
         // --- 1. 执行 C 模块 10Hz 闭环 ---
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
-            if (c_module_) {
+            if (landing_) {
+                c_output.drone_id = drone_id_;
+                c_output.x = cur_x_;
+                c_output.y = cur_y_;
+                c_output.vx = 0.0;
+                c_output.vy = 0.0;
+                c_output.status = V2DroneStatus::ST_LANDED;
+            } else if (c_module_) {
                 // 将最新物理状态灌入 C 模块
                 c_module_->SetCurrentState(cur_x_, cur_y_, cur_vx_, cur_vy_);
 
@@ -152,6 +196,12 @@ void DroneApp::RunLoop() {
 
                 // 1. 检查是否有“新面孔”出现在 C 模块的失联名单中
                 for (unsigned long lost_id : c_output.suspected_lost_ids) {
+                    // The controller intentionally landed IDs above N during
+                    // a scale-down. They are not failures and must not cause
+                    // a second, inconsistent autonomous rearrangement.
+                    if (active_expected_count_ != 0 && lost_id > active_expected_count_) {
+                        continue;
+                    }
                     if (std::find(confirmed_dead_.begin(), confirmed_dead_.end(), lost_id) == confirmed_dead_.end()) {
                         // 发现新死者，登记造册
                         confirmed_dead_.push_back(lost_id);
@@ -165,9 +215,11 @@ void DroneApp::RunLoop() {
                     alive_ids.push_back(drone_id_); // 先把自己加进去
 
                     // 遍历所有认识的邻居，只把不在 confirmed_dead 名单里的加进去
+                    std::lock_guard<std::mutex> neighborsLock(neighbors_mutex_);
                     for (const auto& pair : known_drones_) {
-                        unsigned long neighbor_id = pair.first;
-                        if (std::find(confirmed_dead_.begin(), confirmed_dead_.end(), neighbor_id) == confirmed_dead_.end()) {
+                        const unsigned long neighbor_id = pair.first;
+                        if ((active_expected_count_ == 0 || neighbor_id <= active_expected_count_) &&
+                            std::find(confirmed_dead_.begin(), confirmed_dead_.end(), neighbor_id) == confirmed_dead_.end()) {
                             alive_ids.push_back(neighbor_id);
                         }
                     }
@@ -222,6 +274,13 @@ void DroneApp::RunLoop() {
 
         // 释放 DDS 内部深拷贝内存
         SharedMessage::DroneStateFinalize(&state);
+
+        // Keep ST_LANDED visible long enough for the controller UI to play
+        // its fade-out, then end this planned-deactivation instance.
+        if (landing_ && std::chrono::duration_cast<std::chrono::milliseconds>(
+                current_time - landing_started_at_).count() >= 1200) {
+            running_ = false;
+        }
 
         // --- 3. 严格补偿休眠 (实现基于全员静止原则的频率动态降级) ---
         // 若 C 模块判定全员 HOVER，将返回 1Hz；若存在动态机动，返回 10Hz

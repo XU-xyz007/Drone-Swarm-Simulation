@@ -2,6 +2,7 @@
 #include "ColorConfig.h"
 #include "core/DroneState.h"
 #include <QPainter>
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -9,7 +10,9 @@ DroneItem::DroneItem(uint32_t droneId, QGraphicsItem* parent)
     : QGraphicsEllipseItem(-RADIUS, -RADIUS, RADIUS * 2, RADIUS * 2, parent)
     , m_droneId(droneId)
 {
-    setPen(QPen(Qt::white, 1));
+    // The body radius is 0.5 m, so the former 1 m outline would cover the
+    // entire fill colour. Keep a fine outline without hiding status colours.
+    setPen(QPen(Qt::white, 0.08));
     setBrush(QColor(128, 128, 128));
     setZValue(2);
     setFlag(ItemIgnoresTransformations, false);
@@ -18,8 +21,43 @@ DroneItem::DroneItem(uint32_t droneId, QGraphicsItem* parent)
 }
 
 void DroneItem::updateFromState(const DroneState& state) {
-    QPointF newPos(state.x, -state.y);
-    QPointF oldPos = pos();
+    if (state.status == DroneStatus::ST_LANDED) {
+        if (!m_landing) {
+            m_landing = true;
+            m_landingTimer.restart();
+            m_trailPoints.clear();
+            setBrush(colorForStatus(DroneStatus::ST_LANDED));
+            setOpacity(1.0);
+            update();
+        }
+        return;
+    }
+
+    // A reused ID has become active again; restore its normal presentation.
+    if (m_landing) {
+        m_landing = false;
+        setOpacity(1.0);
+    }
+    const QPointF reportedPos(state.x, -state.y);
+    if (!m_hasDisplayTarget) {
+        m_displayTarget = reportedPos;
+        m_hasDisplayTarget = true;
+        setPos(reportedPos);
+        setBrush(colorForStatus(state.status));
+        update();
+        return;
+    }
+
+    // DDS state arrives less frequently than the render timer.  Smooth only
+    // the displayed item position to avoid visible step/jitter while keeping
+    // the received state unchanged for all control and quality calculations.
+    m_displayTarget = reportedPos;
+    const QPointF oldPos = pos();
+    const QPointF offset = m_displayTarget - oldPos;
+    QPointF newPos = oldPos + offset * 0.45;
+    if (std::hypot(offset.x(), offset.y()) < 0.01) {
+        newPos = m_displayTarget;
+    }
 
     if (m_trailPoints.empty() ||
         std::hypot(newPos.x() - oldPos.x(), newPos.y() - oldPos.y()) > 0.05) {
@@ -113,8 +151,19 @@ void DroneItem::drawTrail(QPainter* painter) {
         segPath.moveTo(ep0);
         segPath.cubicTo(cp1, cp2, ep1);
 
-        painter->setPen(QPen(QColor(255, 255, 255, alpha), 2));
+        // Keep the motion trail narrower than the 1 m body diameter.
+        painter->setPen(QPen(QColor(255, 255, 255, alpha), 0.12));
         painter->setBrush(Qt::NoBrush);
         painter->drawPath(segPath);
     }
+}
+
+bool DroneItem::advanceLandingAnimation() {
+    if (!m_landing) return false;
+
+    const qreal progress = std::min<qreal>(
+        1.0, static_cast<qreal>(m_landingTimer.elapsed()) / LANDING_FADE_DURATION_MS);
+    setOpacity(1.0 - progress);
+    update();
+    return progress >= 1.0;
 }

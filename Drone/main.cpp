@@ -17,6 +17,32 @@
 std::vector<std::shared_ptr<DroneApp>> g_apps;
 std::vector<std::thread> g_threads;
 std::mutex g_apps_mutex;
+constexpr unsigned long kMaximumDroneCount = 999;
+
+std::shared_ptr<DroneApp> CreateDroneApp(unsigned long droneId,
+                                         const SharedMessage::DroneCmd& cmd) {
+    SwarmFormation::FormationRequest initReq;
+    initReq.formation_id = 0;
+    initReq.formation_text = "";
+    initReq.count = cmd.expected_count;
+    initReq.center_x = 0.0;
+    initReq.center_y = -50.0;
+    initReq.spacing = cmd.spacing > 0.0 ? cmd.spacing : 2.0;
+
+    const auto initResult = SwarmFormation::GenerateSlots(initReq);
+    double initX = 0.0;
+    double initY = -50.0;
+    const size_t index = static_cast<size_t>(droneId - 1);
+    if (initResult.success && index < initResult.slots.size()) {
+        initX = initResult.slots[index].x;
+        initY = initResult.slots[index].y;
+    }
+
+    auto app = std::make_shared<DroneApp>(droneId, initX, initY);
+    // Capture the shared_ptr so retired workers can finish safely if an ID is reused.
+    g_threads.emplace_back([app] { app->Start(); });
+    return app;
+}
 
 // [新增] 模拟无人机随机坠毁/失联
 void SimulateCrash(double ratio) {
@@ -62,74 +88,75 @@ int main(int argc, char* argv[]) {
 
     // ================= 1. 订阅主控端指令 =================
     SwarmComm::SubscribeCmd([](const SharedMessage::DroneCmd& cmd) {
-        // [新增] 首次接触日志：仅在收到第一条指令时打印一次，证明链路已打通
         static std::atomic<bool> first_contact{ false };
         if (!first_contact.exchange(true)) {
-            std::cout << "\n[系统日志] 通信链路打通！成功接收到主控端首次指令："
-                << "cmd_id=" << cmd.cmd_id
-                << " | 目标数量=" << cmd.expected_count << " 架" << std::endl;
+            std::cout << "\n[System] command link ready: cmd_id=" << cmd.cmd_id
+                      << " | target=" << cmd.expected_count << std::endl;
         }
 
-        std::lock_guard<std::mutex> lock(g_apps_mutex);
+        std::vector<std::shared_ptr<DroneApp>> appsToCommand;
+        std::vector<std::shared_ptr<DroneApp>> appsToLand;
+        std::vector<std::shared_ptr<DroneApp>> appsToCancelLanding;
+        if (cmd.cmd_type == SharedMessage::CMD_TAKEOFF ||
+            cmd.cmd_type == SharedMessage::CMD_FORMATION) {
+            const unsigned long targetCount = std::min<unsigned long>(
+                cmd.expected_count, kMaximumDroneCount);
 
-        // 动态扩容与画外降生逻辑
-        if (cmd.cmd_type == SharedMessage::CMD_TAKEOFF || cmd.cmd_type == SharedMessage::CMD_FORMATION) {
-            int target_count = cmd.expected_count;
-            int current_count = g_apps.size();
+            {
+                std::lock_guard<std::mutex> lock(g_apps_mutex);
+                if (g_apps.size() < targetCount) g_apps.resize(targetCount);
 
-            if (target_count > current_count) {
-                int to_add = target_count - current_count;
-
-                // 构造针对新生无人机的“地下待机”方阵请求
-                SwarmFormation::FormationRequest init_req;
-                init_req.formation_id = 0; // 方阵
-                init_req.formation_text = "";
-                init_req.count = target_count;
-                init_req.center_x = 0.0;
-                init_req.center_y = -50.0; // 地平线隐藏区，适配 A 端 Y>0 的渲染过滤
-                init_req.spacing = cmd.spacing > 0.0 ? cmd.spacing : 2.0;
-
-                const auto init_result = SwarmFormation::GenerateSlots(init_req);
-
-                for (int i = 0; i < to_add; ++i) {
-                    unsigned long new_id = current_count + 1 + i;
-                    unsigned int my_index = new_id - 1;
-
-                    double init_x = 0.0;
-                    double init_y = -50.0;
-
-                    // 读取 B 模块算出的槽位进行降生
-                    if (init_result.success && my_index < init_result.slots.size()) {
-                        init_x = init_result.slots[my_index].x;
-                        init_y = init_result.slots[my_index].y;
+                // IDs 1..targetCount remain active. Recreate only instances
+                // that already completed a planned landing and exited.
+                for (unsigned long id = 1; id <= targetCount; ++id) {
+                    auto& app = g_apps[id - 1];
+                    if (!app || !app->IsRunning()) {
+                        app = CreateDroneApp(id, cmd);
+                    } else if (app->IsLanding()) {
+                        appsToCancelLanding.push_back(app);
                     }
-
-                    auto app = std::make_shared<DroneApp>(new_id, init_x, init_y);
-                    g_apps.push_back(app);
-                    g_threads.emplace_back(&DroneApp::Start, app.get());
-
-                    // 让新生无人机立刻执行当前变阵命令并升空
-                    app->OnCommandReceived(cmd);
-
-                    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                    appsToCommand.push_back(app);
                 }
+
+                // Scale-down: higher IDs land visually and do not receive
+                // the new formation command.
+                for (size_t index = targetCount; index < g_apps.size(); ++index) {
+                    if (g_apps[index] && g_apps[index]->IsRunning() &&
+                        !g_apps[index]->IsLanding()) {
+                        appsToLand.push_back(g_apps[index]);
+                    }
+                }
+            }
+
+            for (const auto& app : appsToCancelLanding) app->CancelLanding();
+            for (const auto& app : appsToLand) app->BeginLanding();
+            for (const auto& app : appsToCommand) app->OnCommandReceived(cmd);
+            return;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(g_apps_mutex);
+            for (const auto& app : g_apps) {
+                if (app && app->IsRunning()) appsToCommand.push_back(app);
             }
         }
 
-        // 无论是否扩容，都将新指令分发给所有存活的实体实例
-        for (auto& app : g_apps) {
-            app->OnCommandReceived(cmd);
-        }
-        });
-
+        // Landing reaches every currently active drone, regardless of the UI N field.
+        for (const auto& app : appsToCommand) app->OnCommandReceived(cmd);
+    });
     // ================= 2. 订阅邻居状态更新 =================
     SwarmComm::SubscribeState([](const SharedMessage::DroneState& state) {
-        std::lock_guard<std::mutex> lock(g_apps_mutex);
-        for (auto& app : g_apps) {
-            app->OnStateReceived(state);
+        std::vector<std::shared_ptr<DroneApp>> activeApps;
+        {
+            std::lock_guard<std::mutex> lock(g_apps_mutex);
+            for (const auto& app : g_apps) {
+                if (app && app->IsRunning() && !app->IsLanding()) {
+                    activeApps.push_back(app);
+                }
+            }
         }
-        });
-
+        for (const auto& app : activeApps) app->OnStateReceived(state);
+    });
     // ================= 3. 守护进程主循环 (带键盘监听与仪表盘) =================
     auto last_print_time = std::chrono::steady_clock::now();
 
