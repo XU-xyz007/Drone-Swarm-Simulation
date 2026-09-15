@@ -172,7 +172,8 @@ void MainWindow::setupParameterPanel(QWidget* panel) {
     form->addRow("中心 Y:", m_spinCenterY);
 
     m_spinSpacing = new QDoubleSpinBox();
-    m_spinSpacing->setRange(0.5, 100.0);
+    m_spinSpacing->setRange(3.0, 100.0);
+    m_spinSpacing->setToolTip(QString::fromUtf8("最小间距 3.0m，低于此值可能与碰撞避免安全距离冲突"));
     m_spinSpacing->setValue(5.0);
     m_spinSpacing->setDecimals(1);
     m_spinSpacing->setSuffix(" m");
