@@ -1,4 +1,5 @@
 #include "SwarmControlCModule.h"
+#include "CollisionAvoidance.h"
 #include <algorithm>
 #include <iostream>
 
@@ -38,11 +39,64 @@ void SwarmControlCModule::SetCurrentState(double x, double y, double vx, double 
 DroneStateDDS SwarmControlCModule::RunLoop(double current_time_sec, double dt) {
     auto suspected_ids = CheckLostNeighbors(current_time_sec);
     double intent_vx = 0.0, intent_vy = 0.0;
+
+    // 1. 生成初步意图速度
     GenerateIntent(intent_vx, intent_vy);
 
-    C_to_B_Request req = BuildBModuleRequest(dt, intent_vx, intent_vy);
-    B_to_C_Response resp = MockBModuleCollisionAvoidance(req);
-    ApplyDynamics(resp.safe_vx, resp.safe_vy, dt);
+    // 2. 组装给 B 模块的请求 (完全对齐 B 模块接口)
+    SwarmAvoidance::CollisionAvoidanceRequest b_req;
+    b_req.drone_id = my_id_;
+    b_req.dt = dt;
+    b_req.current_position = { pos_x_, pos_y_ };
+    b_req.current_velocity = { vel_x_, vel_y_ };
+    b_req.desired_velocity = { intent_vx, intent_vy };
+    b_req.target_position = { target_x_, target_y_ };
+
+    // 动力学参数直接使用你头文件中配置的 50/15/30/15，保持高速设置
+    b_req.config.max_speed = config_.dynamics_limits_2d.v_max;
+    b_req.config.max_acceleration = config_.dynamics_limits_2d.a_max_acc;
+    b_req.config.max_deceleration = config_.dynamics_limits_2d.a_max_dec;
+    b_req.config.max_lateral_acceleration = config_.dynamics_limits_2d.a_max_lat;
+    b_req.config.arrival_tolerance = config_.control_gains.deadband_radius;
+
+    // 填充 B 模块需要的防撞判定参数 (针对 50m/s 飙车级调整)
+    b_req.config.safe_distance = 5.0;          // 【护盾大小】设为 5 米，确保 UI 贴图绝对不会碰在一起
+    b_req.config.warning_distance = 20.0;      // 【预警距离】速度快，必须提早在 40 米外就开始让路
+    b_req.config.prediction_horizon = 2.5;     // 【预测视野】往前预测 3 秒
+    b_req.config.stopped_speed_tolerance = 0.1;
+    b_req.config.avoidance_gain = 2.0;         // 【避障意愿】稍微调高一点，让它躲避得更猛烈
+
+    // 3. 转换邻居状态，建立 Arrived 映射
+    for (const auto& kv : neighbors_) {
+        SwarmAvoidance::NeighborState n;
+        n.drone_id = kv.second.drone_id;
+        n.position = { kv.second.x, kv.second.y };
+        n.velocity = { kv.second.vx, kv.second.vy };
+
+        // 核心：如果 C 模块判定对方已悬停，则让 B 模块将其视为静态障碍物
+        n.motion_state = (kv.second.status == V2DroneStatus::ST_HOVER) ?
+            SwarmAvoidance::NeighborMotionState::Arrived :
+            SwarmAvoidance::NeighborMotionState::Moving;
+
+        b_req.neighbors.push_back(n);
+    }
+
+    // 4. 调用真实 B 模块算法计算绝对安全速度
+    SwarmAvoidance::CollisionAvoidanceResult b_result =
+        SwarmAvoidance::ComputeSafeVelocity(b_req);
+
+    static int b_log_counter = 0;
+    if (++b_log_counter % 10 == 0) {
+        printf("[B模块护航] 无人机 #%u | 邻居数: %zu | 避障状态: %s | 速度干预: (%.2f, %.2f) -> (%.2f, %.2f)\n",
+            my_id_,
+            b_req.neighbors.size(),
+            SwarmAvoidance::AvoidanceStatusMessage(b_result.status), // B 模块自带的状态翻译
+            intent_vx, intent_vy,
+            b_result.safe_velocity.x, b_result.safe_velocity.y);
+    }
+
+    // 5. 应用最终速度到动力学约束
+    ApplyDynamics(b_result.safe_velocity.x, b_result.safe_velocity.y, dt);
 
     return GenerateTelemetry(suspected_ids);
 }
@@ -103,19 +157,28 @@ C_to_B_Request SwarmControlCModule::BuildBModuleRequest(double dt, double ivx, d
     double dy = target_y_ - pos_y_;
     req.distance_to_target = std::sqrt(dx * dx + dy * dy);
 
+    // [核心修改] 遍历邻居时，进行状态映射
     for (const auto& kv : neighbors_) {
-        req.neighbors.push_back(kv.second);
+        BModuleNeighbor b_neighbor;
+        b_neighbor.drone_id = kv.second.drone_id;
+        b_neighbor.x = kv.second.x;
+        b_neighbor.y = kv.second.y;
+        b_neighbor.vx = kv.second.vx;
+        b_neighbor.vy = kv.second.vy;
+
+        // 状态映射：如果是悬停状态，告诉 B 模块它已到达(Arrived)，否则是移动中(Moving)
+        if (kv.second.status == V2DroneStatus::ST_HOVER) {
+            b_neighbor.motion_state = NeighborMotionState::Arrived;
+        }
+        else {
+            b_neighbor.motion_state = NeighborMotionState::Moving;
+        }
+
+        req.neighbors.push_back(b_neighbor);
     }
     return req;
 }
 
-B_to_C_Response SwarmControlCModule::MockBModuleCollisionAvoidance(const C_to_B_Request& req) {
-    B_to_C_Response resp;
-    resp.is_modified = false;
-    resp.safe_vx = req.intent_vx;
-    resp.safe_vy = req.intent_vy;
-    return resp;
-}
 
 void SwarmControlCModule::ApplyDynamics(double safe_vx, double safe_vy, double dt) {
     if (dt <= 0.0001) return;

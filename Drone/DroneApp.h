@@ -28,6 +28,10 @@ public:
     void OnCommandReceived(const SharedMessage::DroneCmd& cmd);
     void PrintDebugStatus();
 
+    void TriggerRearrangement(const std::vector<unsigned long>& alive_ids);
+
+    bool IsRunning() const { return running_; }
+
 private:
     void RunLoop();
     void PublishCurrentState();
@@ -57,4 +61,12 @@ private:
     std::chrono::steady_clock::time_point app_start_time_;
 
     std::mutex state_mutex_;
+
+    // 在 private 区域添加：
+    int current_formation_id_ = 0;
+    double current_center_x_ = 0.0;
+    double current_center_y_ = 0.0;
+    double current_spacing_ = 2.0;
+
+    std::vector<unsigned long> confirmed_dead_; // 记录已确认阵亡的名单
 }; 

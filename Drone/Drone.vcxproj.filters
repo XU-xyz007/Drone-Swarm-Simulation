@@ -13,6 +13,8 @@
     <ClCompile Include="DroneApp.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="SwarmControlCModule.cpp" />
+    <ClCompile Include="..\Algorithm\CollisionAvoidance\CollisionAvoidance.cpp" />
+    <ClCompile Include="..\Algorithm\CollisionAvoidance\CollisionPrediction.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Algorithm\include\FormationAlgorithm.h" />
@@ -29,5 +31,6 @@
     <ClInclude Include="..\SharedMessage\gen_code\DroneMessageTypeSupport.h" />
     <ClInclude Include="DroneApp.h" />
     <ClInclude Include="SwarmControlCModule.h" />
+    <ClInclude Include="SwarmConfig.h" />
   </ItemGroup>
 </Project>
