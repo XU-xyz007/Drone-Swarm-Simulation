@@ -90,8 +90,6 @@ private:
 
     QLabel* m_lblMessageRate;
     QLabel* m_lblThroughput;
-    QLabel* m_lblSequenceGaps;
-    QLabel* m_lblOutOfOrder;
     TelemetrySparkline* m_telemetrySparkline;
     QLabel* m_lblMinDistance;
     QLabel* m_lblSyncError;
