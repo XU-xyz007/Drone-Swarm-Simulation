@@ -27,8 +27,11 @@ public:
     void OnStateReceived(const SharedMessage::DroneState& state);
     void OnCommandReceived(const SharedMessage::DroneCmd& cmd);
     void PrintDebugStatus();
+    // 1. 新增一把算力锁，防止疯狂掉线时引发“线程爆炸”把 CPU 算崩
+    std::mutex rearrangement_mutex_;
 
-    void TriggerRearrangement(const std::vector<unsigned long>& alive_ids);
+    // 2. 修改重排函数的声明（增加 req 参数用于快照传递）
+    void TriggerRearrangement(const std::vector<unsigned long>& alive_ids, SwarmFormation::FormationRequest req);
 
     bool IsRunning() const { return running_; }
 
