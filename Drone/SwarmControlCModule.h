@@ -1,4 +1,4 @@
-ï»¿#pragma once
+#pragma once
 
 #include <cstdint>
 #include <vector>
@@ -7,7 +7,7 @@
 #include "SwarmConfig.h"
 
 // ============================================================================
-// æ•°æ®ç»“æ„å¥‘çº¦å®šä¹‰ (å·²æ”¹åä¸º V2DroneStatusï¼Œå½»åº•æœç»åº•å±‚å†²çª)
+// Êı¾İ½á¹¹ÆõÔ¼¶¨Òå (ÒÑ¸ÄÃûÎª V2DroneStatus£¬³¹µ×¶Å¾øµ×²ã³åÍ»)
 // ============================================================================
 
 enum class V2DroneStatus : uint32_t {
@@ -29,7 +29,7 @@ struct BModuleNeighbor {
     double y;
     double vx;
     double vy;
-    NeighborMotionState motion_state; // æ»¡è¶³ B æ¨¡å—çš„ç¬¬äº”æ¡éœ€æ±‚
+    NeighborMotionState motion_state; // Âú×ã B Ä£¿éµÄµÚÎåÌõĞèÇó
 };
 
 struct DroneStateDDS {

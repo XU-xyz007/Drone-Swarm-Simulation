@@ -2,8 +2,6 @@
 
 #include <vector>
 
-#include "SwarmConfig.h"
-
 namespace SwarmAvoidance {
 
 struct Vector2D {
@@ -24,6 +22,19 @@ struct NeighborState {
     NeighborMotionState motion_state = NeighborMotionState::Unknown;
 };
 
+struct CollisionAvoidanceConfig {
+    double safe_distance = 1.0;
+    double warning_distance = 1.5;
+    double prediction_horizon = 1.5;
+    double max_speed = 5.0;
+    double max_acceleration = 2.0;
+    double max_deceleration = 3.0;
+    double max_lateral_acceleration = 2.5;
+    double arrival_tolerance = 0.05;
+    double stopped_speed_tolerance = 0.05;
+    double avoidance_gain = 1.0;
+};
+
 struct CollisionAvoidanceRequest {
     unsigned long drone_id = 0;
     Vector2D current_position;
@@ -31,14 +42,8 @@ struct CollisionAvoidanceRequest {
     Vector2D desired_velocity;
     Vector2D target_position;
     std::vector<NeighborState> neighbors;
-    // Snapshot of the single shared C/B physical configuration.
-    V2Config config;
-
-    // The caller must pass the measured control-loop period every cycle.
-    double dt = 0.0;
-    double communication_delay = 0.0;
-    double arrival_tolerance = 0.05;
-    double stopped_speed_tolerance = 0.05;
+    double dt = 0.1;
+    CollisionAvoidanceConfig config;
 };
 
 enum class AvoidanceStatus {

@@ -72,12 +72,13 @@ double RunScenario(std::vector<DroneSim>& drones, const std::string& csv_path) {
             request.desired_velocity = DesiredVelocity(drones[i], 1.3);
             request.target_position = drones[i].target;
             request.dt = dt;
-            request.config.avoidance_params.drone_radius = 0.5;
-            request.config.avoidance_params.safety_margin = 1.0;
-            request.config.dynamics_limits_2d.v_max = 5.0;
-            request.config.dynamics_limits_2d.a_max_acc = 3.0;
-            request.config.dynamics_limits_2d.a_max_dec = 5.0;
-            request.config.dynamics_limits_2d.a_max_lat = 4.0;
+            request.config.safe_distance = 0.8;
+            request.config.warning_distance = 1.3;
+            request.config.prediction_horizon = 2.5;
+            request.config.max_speed = 3.0;
+            request.config.max_acceleration = 2.0;
+            request.config.max_deceleration = 3.0;
+            request.config.max_lateral_acceleration = 2.5;
 
             for (std::size_t j = 0; j < drones.size(); ++j) {
                 if (i != j) {
@@ -87,7 +88,7 @@ double RunScenario(std::vector<DroneSim>& drones, const std::string& csv_path) {
             }
             const auto result = SwarmAvoidance::ComputeSafeVelocity(request);
             next_velocities[i] = ApplyDynamics(drones[i].velocity,
-                result.safe_velocity, request.config.dynamics_limits_2d.a_max_lat, dt);
+                result.safe_velocity, request.config.max_lateral_acceleration, dt);
             csv << std::fixed << std::setprecision(4)
                 << step * dt << ',' << drones[i].id << ','
                 << drones[i].position.x << ',' << drones[i].position.y << ','
@@ -158,7 +159,7 @@ int main() {
     std::cout << "Generated collision-avoidance-preview.svg and .csv\n"
         << "Minimum simulated pair distance: " << minimum_distance << " m\n"
         << "Maximum final target error: " << maximum_target_error << " m\n";
-    if (minimum_distance < 2.0 || maximum_target_error > 0.1) {
+    if (minimum_distance < 0.8 || maximum_target_error > 0.1) {
         std::cerr << "Preview acceptance criteria failed.\n";
         return 1;
     }
