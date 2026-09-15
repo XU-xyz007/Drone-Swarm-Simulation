@@ -180,6 +180,9 @@ void DroneApp::RunLoop() {
 
                 // 根据 C 模块的动力学计算结果更新本机真实物理量
                 cur_x_ = c_output.x;
+
+                // 根据 C 模块的动力学计算结果更新本机真实物理量
+                cur_x_ = c_output.x;
                 cur_y_ = c_output.y;
                 cur_vx_ = c_output.vx;
                 cur_vy_ = c_output.vy;

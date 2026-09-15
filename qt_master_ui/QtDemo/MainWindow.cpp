@@ -23,6 +23,9 @@
 #include "render/CoordinateMapper.h"
 #include "render/GridScene.h"
 #include "render/TelemetrySparkline.h"
+#include "test/TestStateReceiver.h"
+#include "test/StressTestReceiver.h"
+#include "test/TestPresets.h"
 #include <QHBoxLayout>
 #include <QMessageBox>
 #include <QVBoxLayout>
@@ -58,11 +61,35 @@ MainWindow::MainWindow(ICommandSender* cmdSender,
     : QMainWindow(parent)
     , m_cmdSender(cmdSender)
     , m_stateReceiver(stateReceiver)
+    , m_fakeReceiver(stateReceiver)
     , m_stateCache(stateCache)
     , m_formationChecker(formationChecker)
 {
     setWindowTitle("无人机编队主控端");
     resize(1160, 760);
+
+    m_testReceiver = new TestStateReceiver(this);
+    m_testReceiver->setDroneCount(8);
+    m_testReceiver->setOnStateReceived([this](const DroneState& state) {
+        m_stateCache->updateState(state);
+        m_formationChecker->updateDroneCmdId(state.drone_id, state.current_cmd_id);
+        m_formationChecker->updateDroneStatus(state.drone_id, state.status);
+        observeStateForQuality(state);
+    });
+    m_testReceiver->setOnDroneRemoved([this](uint32_t droneId) {
+        m_stateCache->removeState(droneId);
+    });
+
+    m_stressReceiver = new StressTestReceiver(this);
+    m_stressReceiver->setOnStateReceived([this](const DroneState& state) {
+        m_stateCache->updateState(state);
+        m_formationChecker->updateDroneCmdId(state.drone_id, state.current_cmd_id);
+        m_formationChecker->updateDroneStatus(state.drone_id, state.status);
+        observeStateForQuality(state);
+    });
+    m_stressReceiver->setOnDroneRemoved([this](uint32_t droneId) {
+        m_stateCache->removeState(droneId);
+    });
 
     m_coordMapper = new CoordinateMapper();
 
@@ -76,6 +103,10 @@ MainWindow::MainWindow(ICommandSender* cmdSender,
     m_renderTimer = new QTimer(this);
     connect(m_renderTimer, &QTimer::timeout, this, &MainWindow::onRenderTick);
     m_renderTimer->start(50);
+
+    m_stressStatsTimer = new QTimer(this);
+    connect(m_stressStatsTimer, &QTimer::timeout, this, &MainWindow::updateStressStats);
+    m_stressStatsTimer->start(1000);
 
     m_telemetryTimer = new QTimer(this);
     connect(m_telemetryTimer, &QTimer::timeout, this, &MainWindow::updateCommunicationTelemetry);
@@ -103,6 +134,7 @@ void MainWindow::setupUi() {
     leftLayout->addWidget(leftPanel->findChild<QGroupBox*>("paramGroup"));
 
     setupButtons(leftPanel);
+    setupStressTestPanel(leftPanel);
     leftLayout->addStretch();
 
     mainLayout->addWidget(leftPanel);
@@ -134,7 +166,8 @@ void MainWindow::setupParameterPanel(QWidget* panel) {
     connect(m_spinN, QOverload<int>::of(&QSpinBox::valueChanged),
         [this](int value) {
             std::cout << "[UI] 无人机数量变更为: " << value << std::endl;
-            m_stateReceiver->setDroneCount(static_cast<uint32_t>(value));
+            m_fakeReceiver->setDroneCount(static_cast<uint32_t>(value));
+            m_testReceiver->setDroneCount(static_cast<uint32_t>(value));
         });
 
     m_comboFormation = new QComboBox();
@@ -172,12 +205,16 @@ void MainWindow::setupParameterPanel(QWidget* panel) {
     form->addRow("中心 Y:", m_spinCenterY);
 
     m_spinSpacing = new QDoubleSpinBox();
-    m_spinSpacing->setRange(3.0, 100.0);
-    m_spinSpacing->setToolTip(QString::fromUtf8("最小间距 3.0m，低于此值可能与碰撞避免安全距离冲突"));
-    m_spinSpacing->setValue(5.0);
+    m_spinSpacing->setRange(0.5, 100.0);
+    m_spinSpacing->setValue(30.0);
     m_spinSpacing->setDecimals(1);
     m_spinSpacing->setSuffix(" m");
     form->addRow("间距:", m_spinSpacing);
+
+    m_chkTestMode = new QCheckBox("测试模式（确定性队形）");
+    m_chkTestMode->setToolTip("勾选后无人机按确定队形目标飞行，可验证队形完成判定");
+    connect(m_chkTestMode, &QCheckBox::toggled, this, &MainWindow::onTestModeToggled);
+    form->addRow(m_chkTestMode);
 
     QVBoxLayout* panelLayout = qobject_cast<QVBoxLayout*>(panel->layout());
     if (panelLayout) {
@@ -187,7 +224,7 @@ void MainWindow::setupParameterPanel(QWidget* panel) {
 
 void MainWindow::setupCanvas() {
     m_scene = new GridScene(this);
-    m_scene->setSceneRect(-60, -50, 120, 100);
+    m_scene->setSceneRect(-200, -200, 400, 400);
 
     m_graphicsView = new QGraphicsView(m_scene);
     m_graphicsView->setRenderHint(QPainter::Antialiasing);
@@ -271,6 +308,7 @@ void MainWindow::onTakeoff() {
 
     m_formationChecker->setLatestCmdId(cmd.cmd_id);
     m_stateReceiver->setLatestCmdId(cmd.cmd_id);
+    m_testReceiver->setLatestCmdId(cmd.cmd_id);
 
     statusBar()->showMessage("已发送起飞命令");
     std::cout << "========== 起飞 ==========" << std::endl;
@@ -314,13 +352,17 @@ void MainWindow::onFormation() {
     m_formationChecker->setLatestCmdId(cmd.cmd_id);
     m_stateReceiver->setLatestCmdId(cmd.cmd_id);
 
+    m_testReceiver->setLatestCmdId(cmd.cmd_id);
+    m_testReceiver->setFormationTarget(cmd.formation_id, cmd.target_x, cmd.target_y,
+                                       cmd.spacing, N);
+
     m_formationCompleted = false;
 
     std::string formationName = (formationIdx < 4)
         ? m_comboFormation->currentText().toStdString()
         : ("文字:\"" + cmd.formation_text + "\"");
     statusBar()->showMessage(QString::fromStdString(
-        "已发送队形命令 (" + formationName + ")"));
+        "已发送队形命令 (" + formationName + ")，进度: 0/" + std::to_string(N)));
     std::cout << "========== 切换队形 ==========" << std::endl;
 }
 
@@ -339,6 +381,7 @@ void MainWindow::onLand() {
 
     m_formationChecker->setLatestCmdId(cmd.cmd_id);
     m_stateReceiver->setLatestCmdId(cmd.cmd_id);
+    m_testReceiver->setLatestCmdId(cmd.cmd_id);
 
     statusBar()->showMessage("已发送降落命令");
     std::cout << "========== 降落 ==========" << std::endl;
@@ -359,14 +402,36 @@ void MainWindow::onEmergency() {
 
     m_formationChecker->setLatestCmdId(cmd.cmd_id);
     m_stateReceiver->setLatestCmdId(cmd.cmd_id);
+    m_testReceiver->setLatestCmdId(cmd.cmd_id);
 
     statusBar()->showMessage("已发送急停命令");
     std::cout << "========== 急停 ==========" << std::endl;
 }
 
+void MainWindow::onTestModeToggled(bool checked) {
+    if (checked) {
+        m_fakeReceiver->stop();
+        m_stateReceiver = m_testReceiver;
+        m_stateReceiver->start();
+        statusBar()->showMessage("测试模式：确定性队形");
+        std::cout << "========== 切换到测试模式 ==========" << std::endl;
+    } else {
+        m_testReceiver->stop();
+        m_stateReceiver = m_fakeReceiver;
+        m_stateReceiver->start();
+        statusBar()->showMessage("就绪");
+        std::cout << "========== 切换到随机游走模式 ==========" << std::endl;
+    }
+}
+
 void MainWindow::onCompletionCheck() {
     auto progress = m_formationChecker->getProgress();
     uint32_t totalCount = static_cast<uint32_t>(progress.second);
+
+    if (!m_formationCompleted) {
+        statusBar()->showMessage(QString::fromStdString(
+            "队形进行中，进度: " + std::to_string(progress.first) + "/" + std::to_string(totalCount)));
+    }
 
     if (m_formationChecker->isFormationComplete() && !m_formationCompleted) {
         m_formationCompleted = true;
@@ -392,7 +457,7 @@ void MainWindow::updateDroneDisplay() {
     std::unordered_set<uint32_t> activeIds;
 
     for (const auto& state : states) {
-        if (state.status == DroneStatus::ST_LANDED || state.status == DroneStatus::ST_LOST) continue;
+        if (state.status == DroneStatus::ST_LANDED) continue;
 
         activeIds.insert(state.drone_id);
 
@@ -493,6 +558,110 @@ void MainWindow::setupQualityPanel(QWidget* panel) {
 
     QVBoxLayout* panelLayout = qobject_cast<QVBoxLayout*>(panel->layout());
     if (panelLayout) panelLayout->addWidget(group);
+}
+
+void MainWindow::setupStressTestPanel(QWidget* container) {
+    QGroupBox* group = new QGroupBox("压力测试", container);
+    group->setObjectName("stressGroup");
+    QVBoxLayout* layout = new QVBoxLayout(group);
+
+    m_comboStressPreset = new QComboBox();
+    m_comboStressPreset->setToolTip("选择压力测试预设场景");
+    auto presets = StressPreset::all();
+    for (size_t i = 0; i < presets.size(); ++i) {
+        m_comboStressPreset->addItem(QString::fromStdString(presets[i].name));
+    }
+    layout->addWidget(new QLabel("测试场景:"));
+    layout->addWidget(m_comboStressPreset);
+
+    m_lblStressStats = new QLabel("未启动");
+    m_lblStressStats->setWordWrap(true);
+    m_lblStressStats->setStyleSheet("QLabel{color:#888;font-size:11px;}");
+    layout->addWidget(m_lblStressStats);
+
+    connect(m_comboStressPreset, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &MainWindow::onStressPresetChanged);
+
+    QVBoxLayout* containerLayout = qobject_cast<QVBoxLayout*>(container->layout());
+    if (containerLayout) {
+        containerLayout->addWidget(group);
+    }
+}
+
+void MainWindow::onStressPresetChanged(int index) {
+    if (index < 0) return;
+    auto presets = StressPreset::all();
+    if (static_cast<size_t>(index) >= presets.size()) return;
+
+    const StressPreset& preset = presets[index];
+
+    m_fakeReceiver->stop();
+    m_testReceiver->stop();
+    m_stateCache->clear();
+
+    m_coordMapper->reset();
+    m_formationChecker->reset();
+    m_formationChecker->setExpectedCount(preset.droneCount);
+    m_formationChecker->setLatestCmdId(1);
+    m_formationCompleted = false;
+
+    m_stressReceiver->setPreset(preset);
+    m_stressReceiver->start();
+    m_stateReceiver = m_stressReceiver;
+
+    m_spinN->blockSignals(true);
+    m_spinN->setValue(static_cast<int>(preset.droneCount));
+    m_spinN->blockSignals(false);
+
+    m_chkTestMode->blockSignals(true);
+    m_chkTestMode->setChecked(false);
+    m_chkTestMode->blockSignals(false);
+
+    statusBar()->showMessage(QString::fromStdString(
+        "压力测试: " + preset.name + " | " + preset.description));
+    std::cout << "========== 压力测试: " << preset.name << " ==========" << std::endl;
+    std::cout << "[StressTest] " << preset.description << std::endl;
+}
+
+void MainWindow::updateStressStats() {
+    if (m_stateReceiver != m_stressReceiver) {
+        m_lblStressStats->setText("未启动");
+        return;
+    }
+    if (!m_stressReceiver->currentPreset()) {
+        m_lblStressStats->setText("未启动");
+        return;
+    }
+
+    QString text;
+    double targetHz = static_cast<double>(m_stressReceiver->currentPreset()->updateHz);
+    double actualFps = m_stressReceiver->currentFps();
+    bool fpsReady = (actualFps >= 0.0);
+    bool isHealthy = fpsReady && (actualFps >= targetHz * 0.8);
+
+    std::cout << "[StressStats] targetHz=" << targetHz
+              << " actualFps=" << actualFps
+              << " fpsReady=" << fpsReady
+              << " isHealthy=" << isHealthy << std::endl;
+
+    text += QString("场景: %1\n")
+        .arg(QString::fromStdString(m_stressReceiver->currentPreset()->name));
+    text += QString("无人机: %1 架\n")
+        .arg(m_stressReceiver->currentPreset()->droneCount);
+    text += QString("目标频率: %1 Hz\n")
+        .arg(targetHz, 0, 'f', 0);
+    text += QString("实际速率: %1\n")
+        .arg(fpsReady ? QString::number(actualFps, 'f', 1) + " Hz" : "计算中...");
+    text += QString("消息总数: %1\n")
+        .arg(m_stressReceiver->messageCount());
+    text += QString("状态: %1")
+        .arg(!fpsReady ? "计算中..." : (isHealthy ? "正常" : "过载"));
+
+    m_lblStressStats->setText(text);
+    m_lblStressStats->setStyleSheet(
+        !fpsReady ? "QLabel{color:#888;font-size:11px;}" :
+        (isHealthy ? "QLabel{color:#4CAF50;font-size:11px;}" :
+                     "QLabel{color:#F44336;font-size:11px;}"));
 }
 
 void MainWindow::updateCommunicationTelemetry() {

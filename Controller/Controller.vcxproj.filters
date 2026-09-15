@@ -57,7 +57,13 @@
     <ClCompile Include="..\qt_master_ui\QtDemo\render\CoordinateMapper.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="..\qt_master_ui\QtDemo\test\TestStateReceiver.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
     <ClCompile Include="..\qt_master_ui\QtDemo\render\DroneItem.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\qt_master_ui\QtDemo\test\StressTestReceiver.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="..\qt_master_ui\QtDemo\render\GridScene.cpp">
@@ -106,7 +112,13 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <QtMoc Include="..\qt_master_ui\QtDemo\test\TestStateReceiver.h">
+      <Filter>头文件</Filter>
+    </QtMoc>
     <QtMoc Include="..\qt_master_ui\QtDemo\MainWindow.h">
+      <Filter>头文件</Filter>
+    </QtMoc>
+    <QtMoc Include="..\qt_master_ui\QtDemo\test\StressTestReceiver.h">
       <Filter>头文件</Filter>
     </QtMoc>
     <QtMoc Include="..\qt_master_ui\QtDemo\render\GridScene.h">

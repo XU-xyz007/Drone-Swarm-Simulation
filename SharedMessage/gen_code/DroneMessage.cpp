@@ -1,5 +1,5 @@
 /*************************************************************/
-/*           ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½É±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Þ¸ï¿½                */
+/*           ´ËÎÄ¼þÓÉ±àÒëÆ÷Éú³É£¬ÇëÎðËæÒâÐÞ¸Ä                */
 /*************************************************************/
 #include "ZRMemPool.h"
 #include <stdio.h>
@@ -1152,7 +1152,7 @@ void DroneCmdPrintData(const DroneCmd *sample)
 
     if (sample->formation_text != NULL)
     {
-        printf("sample->formation_text(%zu): %s\n", strlen(sample->formation_text), sample->formation_text);
+        printf("sample->formation_text(%d): %s\n", strlen(sample->formation_text), sample->formation_text);
     }
     else
     {

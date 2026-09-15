@@ -35,6 +35,6 @@ private:
     uint32_t m_droneId;
     std::deque<TrailPoint> m_trailPoints;
     QElapsedTimer m_trailTimer;
-    static constexpr qreal PHYSICAL_RADIUS = 0.5;
+    static constexpr qreal RADIUS = 5.0;
     static constexpr qint64 TRAIL_DURATION_MS = 1500;
 };

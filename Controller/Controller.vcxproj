@@ -32,6 +32,8 @@
     <ClCompile Include="..\qt_master_ui\QtDemo\render\CoordinateMapper.cpp" />
     <ClCompile Include="..\qt_master_ui\QtDemo\render\DroneItem.cpp" />
     <ClCompile Include="..\qt_master_ui\QtDemo\render\GridScene.cpp" />
+    <ClCompile Include="..\qt_master_ui\QtDemo\test\StressTestReceiver.cpp" />
+    <ClCompile Include="..\qt_master_ui\QtDemo\test\TestStateReceiver.cpp" />
     <ClCompile Include="..\SharedMessage\gen_code\DroneMessage.cpp" />
     <ClCompile Include="..\SharedMessage\gen_code\DroneMessageTypeSupport.cpp" />
     <ClCompile Include="main.cpp" />
@@ -45,9 +47,11 @@
     <ClInclude Include="..\Algorithm\Formations\TextFormation.h" />
     <ClInclude Include="..\Algorithm\Formations\TextRasterizerWin.h" />
     <ClInclude Include="..\Communication\DdsService.h" />
+    <QtMoc Include="..\qt_master_ui\QtDemo\test\TestStateReceiver.h" />
     <QtMoc Include="..\qt_master_ui\QtDemo\MainWindow.h" />
     <ClInclude Include="..\qt_master_ui\QtDemo\render\DroneItem.h" />
     <ClInclude Include="..\qt_master_ui\QtDemo\render\TelemetrySparkline.h" />
+    <QtMoc Include="..\qt_master_ui\QtDemo\test\StressTestReceiver.h" />
     <QtMoc Include="..\qt_master_ui\QtDemo\render\GridScene.h" />
     <ClInclude Include="..\SharedMessage\gen_code\DroneMessage.h" />
     <ClInclude Include="..\SharedMessage\gen_code\DroneMessageDataReader.h" />
