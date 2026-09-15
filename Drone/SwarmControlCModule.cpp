@@ -60,11 +60,11 @@ DroneStateDDS SwarmControlCModule::RunLoop(double current_time_sec, double dt) {
     b_req.config.arrival_tolerance = config_.control_gains.deadband_radius;
 
     // 填充 B 模块需要的防撞判定参数 (针对 50m/s 飙车级调整)
-    b_req.config.safe_distance = 5.0;          // 【护盾大小】设为 5 米，确保 UI 贴图绝对不会碰在一起
-    b_req.config.warning_distance = 20.0;      // 【预警距离】速度快，必须提早在 40 米外就开始让路
+    b_req.config.safe_distance = 2.0;          // 【护盾大小】设为 5 米，确保 UI 贴图绝对不会碰在一起
+    b_req.config.warning_distance = 5.0;      // 【预警距离】速度快，必须提早在 40 米外就开始让路
     b_req.config.prediction_horizon = 2.5;     // 【预测视野】往前预测 3 秒
     b_req.config.stopped_speed_tolerance = 0.1;
-    b_req.config.avoidance_gain = 2.0;         // 【避障意愿】稍微调高一点，让它躲避得更猛烈
+    b_req.config.avoidance_gain = 0.5;         // 【避障意愿】稍微调高一点，让它躲避得更猛烈
 
     // 3. 转换邻居状态，建立 Arrived 映射
     for (const auto& kv : neighbors_) {

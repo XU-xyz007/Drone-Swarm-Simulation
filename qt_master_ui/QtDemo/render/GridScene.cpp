@@ -65,18 +65,23 @@ void GridScene::drawForeground(QPainter* painter, const QRectF& rect) {
     double left = std::floor(visibleRect.left() / gridInterval) * gridInterval;
     double top = std::floor(visibleRect.top() / gridInterval) * gridInterval;
 
+    double scaleX = std::abs(painter->worldTransform().m11());
+    double scaleY = std::abs(painter->worldTransform().m22());
+    double scale = std::max(scaleX, scaleY);
+    if (scale < 0.001) scale = 0.001;
+
     QPen labelPen(m_labelColor);
     painter->setPen(labelPen);
-    QFont font("Consolas", 9);
+
+    QFont font("Consolas");
+    font.setPixelSize(static_cast<int>(std::max(1.0, 9.0 / scale)));
     painter->setFont(font);
 
     QFontMetrics fm(font);
-    const int labelHeight = fm.height();
-    const int labelPadding = 4;
 
     QRectF viewportRect = view->viewport()->rect();
-    double marginX = 30.0 / view->transform().m11();
-    double marginY = 20.0 / view->transform().m22();
+    double marginX = 30.0 / scale;
+    double marginY = 20.0 / scale;
 
     visibleRect.adjust(marginX, marginY, -marginX, -marginY);
 
@@ -84,14 +89,13 @@ void GridScene::drawForeground(QPainter* painter, const QRectF& rect) {
         if (x < visibleRect.left() || x > visibleRect.right()) continue;
         QString label = QString::number(x, 'f', (gridInterval >= 1.0) ? 0 : 1);
         QPointF scenePos(x, visibleRect.bottom());
-        QPoint viewPos = view->mapFromScene(scenePos);
         painter->drawText(QPointF(x, visibleRect.bottom() + marginY * 0.6), label);
     }
 
     for (double y = top; y <= visibleRect.bottom(); y += gridInterval) {
         if (y < visibleRect.top() || y > visibleRect.bottom()) continue;
         QString label = QString::number(-y, 'f', (gridInterval >= 1.0) ? 0 : 1);
-        QPointF scenePos(visibleRect.left(), y);
-        painter->drawText(QPointF(visibleRect.left() + marginX * 0.3, y + labelHeight * 0.3), label);
+        painter->drawText(QPointF(visibleRect.left() + marginX * 0.3,
+                                   y + fm.height() * 0.3), label);
     }
 }

@@ -6,10 +6,10 @@
 #include <vector>
 
 DroneItem::DroneItem(uint32_t droneId, QGraphicsItem* parent)
-    : QGraphicsEllipseItem(-RADIUS, -RADIUS, RADIUS * 2, RADIUS * 2, parent)
+    : QGraphicsEllipseItem(-PHYSICAL_RADIUS, -PHYSICAL_RADIUS, PHYSICAL_RADIUS * 2, PHYSICAL_RADIUS * 2, parent)
     , m_droneId(droneId)
 {
-    setPen(QPen(Qt::white, 1));
+    setPen(Qt::NoPen);
     setBrush(QColor(128, 128, 128));
     setZValue(2);
     setFlag(ItemIgnoresTransformations, false);
@@ -48,9 +48,11 @@ QRectF DroneItem::boundingRect() const {
         return base;
 
     QPointF origin = pos();
+    const qreal trailBound = PHYSICAL_RADIUS;
     for (const auto& tp : m_trailPoints) {
         QPointF local = tp.pos - origin;
-        base = base.united(QRectF(local.x() - 3, local.y() - 3, 6, 6));
+        base = base.united(QRectF(local.x() - trailBound, local.y() - trailBound,
+                                    trailBound * 2, trailBound * 2));
     }
     return base;
 }
@@ -91,8 +93,8 @@ void DroneItem::drawTrail(QPainter* painter) {
         if (segLen < 0.001) continue;
         segDir /= segLen;
 
-        QPointF ep0 = p0 + segDir * RADIUS;
-        QPointF ep1 = p1 - segDir * RADIUS;
+        QPointF ep0 = p0 + segDir * PHYSICAL_RADIUS;
+        QPointF ep1 = p1 - segDir * PHYSICAL_RADIUS;
 
         QPointF t0, t1;
         if (i == 0) {
@@ -113,7 +115,7 @@ void DroneItem::drawTrail(QPainter* painter) {
         segPath.moveTo(ep0);
         segPath.cubicTo(cp1, cp2, ep1);
 
-        painter->setPen(QPen(QColor(255, 255, 255, alpha), 2));
+        painter->setPen(QPen(QColor(255, 255, 255, alpha), 0.3));
         painter->setBrush(Qt::NoBrush);
         painter->drawPath(segPath);
     }

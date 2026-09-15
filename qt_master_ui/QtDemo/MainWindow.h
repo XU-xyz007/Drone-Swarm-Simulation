@@ -11,7 +11,6 @@
 #include <QStatusBar>
 #include <QGroupBox>
 #include <QLabel>
-#include <QCheckBox>
 #include <QEvent>
 #include <QWheelEvent>
 #include <unordered_map>
@@ -26,10 +25,7 @@ class IFormationChecker;
 class DroneItem;
 class CoordinateMapper;
 class GridScene;
-class TestStateReceiver;
-class StressTestReceiver;
 class TelemetrySparkline;
-struct StressPreset;
 struct DroneState;
 struct DroneCmd;
 
@@ -58,29 +54,22 @@ private slots:
     void onEmergency();
     void onCompletionCheck();
     void onRenderTick();
-    void onTestModeToggled(bool checked);
-    void onStressPresetChanged(int index);
 
 private:
     void setupUi();
     void setupParameterPanel(QWidget* panel);
     void setupCanvas();
     void setupButtons(QWidget* container);
-    void setupStressTestPanel(QWidget* container);
     void setupTelemetryPanel(QWidget* panel);
     void setupQualityPanel(QWidget* panel);
     void setupStatusBar();
     void updateDroneDisplay();
-    void updateStressStats();
     void updateCommunicationTelemetry();
     void updateQualityMetrics();
     bool beginQualityTracking(const DroneCmd& cmd);
 
     ICommandSender*    m_cmdSender;
     IStateReceiver*    m_stateReceiver;
-    IStateReceiver*    m_fakeReceiver = nullptr;
-    TestStateReceiver* m_testReceiver = nullptr;
-    StressTestReceiver* m_stressReceiver = nullptr;
     IDroneStateCache*  m_stateCache;
     IFormationChecker* m_formationChecker;
 
@@ -99,10 +88,6 @@ private:
     QPushButton* m_btnLand;
     QPushButton* m_btnEmergency;
 
-    QCheckBox* m_chkTestMode;
-
-    QComboBox* m_comboStressPreset;
-    QLabel* m_lblStressStats;
     QLabel* m_lblMessageRate;
     QLabel* m_lblThroughput;
     TelemetrySparkline* m_telemetrySparkline;
@@ -114,7 +99,6 @@ private:
 
     QTimer* m_completionTimer;
     QTimer* m_renderTimer;
-    QTimer* m_stressStatsTimer;
     QTimer* m_telemetryTimer;
 
     std::unordered_map<uint32_t, DroneItem*> m_droneItems;
