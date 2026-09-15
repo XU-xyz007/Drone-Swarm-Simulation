@@ -39,6 +39,7 @@
 #include <iostream>
 #include <limits>
 #include <unordered_set>
+#include <utility>
 
 namespace {
 // Keep the receipt-side arrival statistic consistent with C's current
@@ -665,6 +666,7 @@ void MainWindow::updateStressStats() {
 }
 
 void MainWindow::updateCommunicationTelemetry() {
+    detectTimedOutDrones();
     updateQualityMetrics();
     const CommunicationTelemetry telemetry = m_stateReceiver->takeCommunicationTelemetry();
     if (!telemetry.available) {
@@ -678,6 +680,38 @@ void MainWindow::updateCommunicationTelemetry() {
     m_lblMessageRate->setText(locale.toString(static_cast<qulonglong>(telemetry.stateSamplesPerSecond)) + " /s");
     m_lblThroughput->setText(locale.toString(kbitPerSecond, 'f', 2) + " kbit/s");
     m_telemetrySparkline->appendSample(kbitPerSecond);
+}
+
+void MainWindow::detectTimedOutDrones() {
+    if (!m_qualityTracking) return;
+
+    // C detects a moving neighbor after three missed 10 Hz samples and a
+    // hovering neighbor after three missed 1 Hz samples. The controller uses
+    // a conservative grace period when the one-shot failover report is missed.
+    constexpr auto kActiveGrace = std::chrono::milliseconds(1000);
+    constexpr auto kHoverGrace = std::chrono::milliseconds(4500);
+    const auto now = std::chrono::steady_clock::now();
+    std::vector<uint32_t> timedOutIds;
+
+    for (const auto& entry : m_lastSeenStates) {
+        const uint32_t droneId = entry.first;
+        if (m_lostDroneIds.count(droneId) != 0 ||
+            m_qualityTargets.count(droneId) == 0) {
+            continue;
+        }
+
+        const DroneStatus status = entry.second.status;
+        const bool hovering = status == DroneStatus::ST_HOVER ||
+                              status == DroneStatus::ST_IDLE;
+        const auto grace = hovering ? kHoverGrace : kActiveGrace;
+        if (now - entry.second.receivedAt > grace) {
+            timedOutIds.push_back(droneId);
+        }
+    }
+
+    for (uint32_t droneId : timedOutIds) {
+        handleDroneLost(droneId);
+    }
 }
 
 void MainWindow::updateQualityMetrics() {
@@ -745,45 +779,104 @@ void MainWindow::updateQualityMetrics() {
 }
 
 bool MainWindow::beginQualityTracking(const DroneCmd& cmd) {
-    SwarmFormation::FormationRequest request;
-    request.formation_id = (cmd.cmd_type == DroneCmdType::CMD_TAKEOFF && cmd.formation_id == 0)
+    m_qualityPlan.formationId = (cmd.cmd_type == DroneCmdType::CMD_TAKEOFF && cmd.formation_id == 0)
         ? 0 : cmd.formation_id;
-    request.formation_text = cmd.formation_text;
-    request.count = cmd.expected_count;
-    request.center_x = cmd.target_x;
-    request.center_y = cmd.target_y;
-    request.spacing = cmd.spacing;
+    m_qualityPlan.formationText = cmd.formation_text;
+    m_qualityPlan.centerX = cmd.target_x;
+    m_qualityPlan.centerY = cmd.target_y;
+    m_qualityPlan.spacing = cmd.spacing;
+
+    m_qualityActiveDroneIds.clear();
+    for (uint32_t droneId = 1; droneId <= cmd.expected_count; ++droneId) {
+        if (m_lostDroneIds.count(droneId) == 0) {
+            m_qualityActiveDroneIds.push_back(droneId);
+        }
+    }
+
+    m_arrivalTimes.clear();
+    m_qualityCmdId = cmd.cmd_id;
+    m_qualityTracking = rebuildQualityTargets();
+    return m_qualityTracking;
+}
+
+bool MainWindow::rebuildQualityTargets() {
+    if (m_qualityActiveDroneIds.empty()) {
+        m_qualityTargets.clear();
+        m_arrivalTimes.clear();
+        return false;
+    }
+
+    std::sort(m_qualityActiveDroneIds.begin(), m_qualityActiveDroneIds.end());
+
+    SwarmFormation::FormationRequest request;
+    request.formation_id = m_qualityPlan.formationId;
+    request.formation_text = m_qualityPlan.formationText;
+    request.count = static_cast<uint32_t>(m_qualityActiveDroneIds.size());
+    request.center_x = m_qualityPlan.centerX;
+    request.center_y = m_qualityPlan.centerY;
+    request.spacing = m_qualityPlan.spacing;
 
     const SwarmFormation::FormationResult result = SwarmFormation::GenerateSlots(request);
     if (!result.success) {
         m_qualityTargets.clear();
         m_arrivalTimes.clear();
-        m_qualityTracking = false;
         std::cerr << "[Quality] 目标槽位计算失败: "
                   << SwarmFormation::FormationErrorMessage(result.error) << std::endl;
         return false;
     }
 
-    m_qualityTargets.clear();
+    std::unordered_map<uint32_t, TargetSlot> rebuiltTargets;
     for (uint32_t index = 0; index < request.count; ++index) {
-        // C 模块的约定：drone_id 1..N 对应 B 算法的 slot index 0..N-1。
         SwarmFormation::Point2D slot;
         if (!SwarmFormation::GetSlot(result, index, slot)) {
             m_qualityTargets.clear();
             m_arrivalTimes.clear();
-            m_qualityTracking = false;
             std::cerr << "[Quality] 读取目标槽位失败，index=" << index << std::endl;
             return false;
         }
-        m_qualityTargets.emplace(index + 1, TargetSlot{slot.x, slot.y});
+        // C uses the sorted alive-ID list to map new slot indexes after a loss.
+        rebuiltTargets.emplace(m_qualityActiveDroneIds[index], TargetSlot{slot.x, slot.y});
     }
+
+    m_qualityTargets = std::move(rebuiltTargets);
     m_arrivalTimes.clear();
-    m_qualityCmdId = cmd.cmd_id;
-    m_qualityTracking = true;
     return true;
 }
 
+void MainWindow::handleDroneLost(uint32_t droneId) {
+    if (droneId == 0 || !m_lostDroneIds.insert(droneId).second) return;
+
+    m_stateCache->removeState(droneId);
+    if (!m_qualityTracking) {
+        statusBar()->showMessage(QString("检测到无人机 %1 失联").arg(droneId));
+        return;
+    }
+
+    const auto active = std::find(m_qualityActiveDroneIds.begin(),
+                                  m_qualityActiveDroneIds.end(), droneId);
+    if (active == m_qualityActiveDroneIds.end()) return;
+
+    m_qualityActiveDroneIds.erase(active);
+    m_arrivalTimes.clear();
+    m_formationCompleted = false;
+    m_formationChecker->setExpectedCount(
+        static_cast<uint32_t>(m_qualityActiveDroneIds.size()));
+
+    if (!rebuildQualityTargets()) {
+        m_qualityTracking = false;
+        statusBar()->showMessage("失联后无法重新计算质量指标");
+        return;
+    }
+
+    statusBar()->showMessage(QString("检测到无人机 %1 失联，按 %2 架存活机重新统计")
+                             .arg(droneId)
+                             .arg(m_qualityActiveDroneIds.size()));
+}
+
 void MainWindow::observeStateForQuality(const DroneState& state) {
+    m_lastSeenStates[state.drone_id] = LastSeenState{
+        std::chrono::steady_clock::now(), state.status};
+
     if (!m_qualityTracking || state.current_cmd_id != m_qualityCmdId) return;
 
     const auto target = m_qualityTargets.find(state.drone_id);

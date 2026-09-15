@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <vector>
 
 enum class DroneStatus : uint32_t {
     ST_IDLE = 0,
@@ -23,5 +24,7 @@ struct DroneState {
     double      vy = 0.0;
     uint32_t    current_cmd_id = 0;
     uint32_t    seq_num = 0;
+    // IDs reported as lost by the C-side failover detector.
+    std::vector<uint32_t> suspected_lost_ids;
     bool        transitioning = false;
 };
