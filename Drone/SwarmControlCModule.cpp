@@ -1,4 +1,4 @@
-#include "SwarmControlCModule.h"
+ï»¿#include "SwarmControlCModule.h"
 #include "CollisionAvoidance.h"
 #include <algorithm>
 #include <iostream>
@@ -40,10 +40,10 @@ DroneStateDDS SwarmControlCModule::RunLoop(double current_time_sec, double dt) {
     auto suspected_ids = CheckLostNeighbors(current_time_sec);
     double intent_vx = 0.0, intent_vy = 0.0;
 
-    // 1. Éú³É³õ²½ÒâÍ¼ËÙ¶È
+    // 1. ç”Ÿæˆåˆæ­¥æ„å›¾é€Ÿåº¦
     GenerateIntent(intent_vx, intent_vy);
 
-    // 2. ×é×°¸ø B Ä£¿éµÄÇëÇó (ÍêÈ«¶ÔÆë B Ä£¿é½Ó¿Ú)
+    // 2. ç»„è£…ç»™ B æ¨¡å—çš„è¯·æ±‚ (å®Œå…¨å¯¹é½ B æ¨¡å—æ¥å£)
     SwarmAvoidance::CollisionAvoidanceRequest b_req;
     b_req.drone_id = my_id_;
     b_req.dt = dt;
@@ -51,29 +51,19 @@ DroneStateDDS SwarmControlCModule::RunLoop(double current_time_sec, double dt) {
     b_req.current_velocity = { vel_x_, vel_y_ };
     b_req.desired_velocity = { intent_vx, intent_vy };
     b_req.target_position = { target_x_, target_y_ };
+    // C and B use the same physical limits and circular-body parameters.
+    b_req.config = config_;
+    b_req.arrival_tolerance = config_.control_gains.deadband_radius;
+    b_req.stopped_speed_tolerance = 0.1;
 
-    // ¶¯Á¦Ñ§²ÎÊıÖ±½ÓÊ¹ÓÃÄãÍ·ÎÄ¼şÖĞÅäÖÃµÄ 50/15/30/15£¬±£³Ö¸ßËÙÉèÖÃ
-    b_req.config.max_speed = config_.dynamics_limits_2d.v_max;
-    b_req.config.max_acceleration = config_.dynamics_limits_2d.a_max_acc;
-    b_req.config.max_deceleration = config_.dynamics_limits_2d.a_max_dec;
-    b_req.config.max_lateral_acceleration = config_.dynamics_limits_2d.a_max_lat;
-    b_req.config.arrival_tolerance = config_.control_gains.deadband_radius;
-
-    // Ìî³ä B Ä£¿éĞèÒªµÄ·À×²ÅĞ¶¨²ÎÊı (Õë¶Ô 50m/s ì­³µ¼¶µ÷Õû)
-    b_req.config.safe_distance = 5.0;          // ¡¾»¤¶Ü´óĞ¡¡¿ÉèÎª 5 Ã×£¬È·±£ UI ÌùÍ¼¾ø¶Ô²»»áÅöÔÚÒ»Æğ
-    b_req.config.warning_distance = 20.0;      // ¡¾Ô¤¾¯¾àÀë¡¿ËÙ¶È¿ì£¬±ØĞëÌáÔçÔÚ 40 Ã×Íâ¾Í¿ªÊ¼ÈÃÂ·
-    b_req.config.prediction_horizon = 2.5;     // ¡¾Ô¤²âÊÓÒ°¡¿ÍùÇ°Ô¤²â 3 Ãë
-    b_req.config.stopped_speed_tolerance = 0.1;
-    b_req.config.avoidance_gain = 2.0;         // ¡¾±ÜÕÏÒâÔ¸¡¿ÉÔÎ¢µ÷¸ßÒ»µã£¬ÈÃËü¶ã±ÜµÃ¸üÃÍÁÒ
-
-    // 3. ×ª»»ÁÚ¾Ó×´Ì¬£¬½¨Á¢ Arrived Ó³Éä
+    // 3. è½¬æ¢é‚»å±…çŠ¶æ€ï¼Œå»ºç«‹ Arrived æ˜ å°„
     for (const auto& kv : neighbors_) {
         SwarmAvoidance::NeighborState n;
         n.drone_id = kv.second.drone_id;
         n.position = { kv.second.x, kv.second.y };
         n.velocity = { kv.second.vx, kv.second.vy };
 
-        // ºËĞÄ£ºÈç¹û C Ä£¿éÅĞ¶¨¶Ô·½ÒÑĞüÍ££¬ÔòÈÃ B Ä£¿é½«ÆäÊÓÎª¾²Ì¬ÕÏ°­Îï
+        // æ ¸å¿ƒï¼šå¦‚æœ C æ¨¡å—åˆ¤å®šå¯¹æ–¹å·²æ‚¬åœï¼Œåˆ™è®© B æ¨¡å—å°†å…¶è§†ä¸ºé™æ€éšœç¢ç‰©
         n.motion_state = (kv.second.status == V2DroneStatus::ST_HOVER) ?
             SwarmAvoidance::NeighborMotionState::Arrived :
             SwarmAvoidance::NeighborMotionState::Moving;
@@ -81,21 +71,21 @@ DroneStateDDS SwarmControlCModule::RunLoop(double current_time_sec, double dt) {
         b_req.neighbors.push_back(n);
     }
 
-    // 4. µ÷ÓÃÕæÊµ B Ä£¿éËã·¨¼ÆËã¾ø¶Ô°²È«ËÙ¶È
+    // 4. è°ƒç”¨çœŸå® B æ¨¡å—ç®—æ³•è®¡ç®—ç»å¯¹å®‰å…¨é€Ÿåº¦
     SwarmAvoidance::CollisionAvoidanceResult b_result =
         SwarmAvoidance::ComputeSafeVelocity(b_req);
 
     static int b_log_counter = 0;
     if (++b_log_counter % 10 == 0) {
-        printf("[BÄ£¿é»¤º½] ÎŞÈË»ú #%u | ÁÚ¾ÓÊı: %zu | ±ÜÕÏ×´Ì¬: %s | ËÙ¶È¸ÉÔ¤: (%.2f, %.2f) -> (%.2f, %.2f)\n",
+        printf("[Bæ¨¡å—æŠ¤èˆª] æ— äººæœº #%u | é‚»å±…æ•°: %zu | é¿éšœçŠ¶æ€: %s | é€Ÿåº¦å¹²é¢„: (%.2f, %.2f) -> (%.2f, %.2f)\n",
             my_id_,
             b_req.neighbors.size(),
-            SwarmAvoidance::AvoidanceStatusMessage(b_result.status), // B Ä£¿é×Ô´øµÄ×´Ì¬·­Òë
+            SwarmAvoidance::AvoidanceStatusMessage(b_result.status), // B æ¨¡å—è‡ªå¸¦çš„çŠ¶æ€ç¿»è¯‘
             intent_vx, intent_vy,
             b_result.safe_velocity.x, b_result.safe_velocity.y);
     }
 
-    // 5. Ó¦ÓÃ×îÖÕËÙ¶Èµ½¶¯Á¦Ñ§Ô¼Êø
+    // 5. åº”ç”¨æœ€ç»ˆé€Ÿåº¦åˆ°åŠ¨åŠ›å­¦çº¦æŸ
     ApplyDynamics(b_result.safe_velocity.x, b_result.safe_velocity.y, dt);
 
     return GenerateTelemetry(suspected_ids);
@@ -157,7 +147,7 @@ C_to_B_Request SwarmControlCModule::BuildBModuleRequest(double dt, double ivx, d
     double dy = target_y_ - pos_y_;
     req.distance_to_target = std::sqrt(dx * dx + dy * dy);
 
-    // [ºËĞÄĞŞ¸Ä] ±éÀúÁÚ¾ÓÊ±£¬½øĞĞ×´Ì¬Ó³Éä
+    // [æ ¸å¿ƒä¿®æ”¹] éå†é‚»å±…æ—¶ï¼Œè¿›è¡ŒçŠ¶æ€æ˜ å°„
     for (const auto& kv : neighbors_) {
         BModuleNeighbor b_neighbor;
         b_neighbor.drone_id = kv.second.drone_id;
@@ -166,7 +156,7 @@ C_to_B_Request SwarmControlCModule::BuildBModuleRequest(double dt, double ivx, d
         b_neighbor.vx = kv.second.vx;
         b_neighbor.vy = kv.second.vy;
 
-        // ×´Ì¬Ó³Éä£ºÈç¹ûÊÇĞüÍ£×´Ì¬£¬¸æËß B Ä£¿éËüÒÑµ½´ï(Arrived)£¬·ñÔòÊÇÒÆ¶¯ÖĞ(Moving)
+        // çŠ¶æ€æ˜ å°„ï¼šå¦‚æœæ˜¯æ‚¬åœçŠ¶æ€ï¼Œå‘Šè¯‰ B æ¨¡å—å®ƒå·²åˆ°è¾¾(Arrived)ï¼Œå¦åˆ™æ˜¯ç§»åŠ¨ä¸­(Moving)
         if (kv.second.status == V2DroneStatus::ST_HOVER) {
             b_neighbor.motion_state = NeighborMotionState::Arrived;
         }
