@@ -11,6 +11,10 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FormationAlgorithmTests", "
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FormationPreview", "Algorithm\tools\FormationPreview.vcxproj", "{D866DBBD-620D-4AE0-B443-FF5C6F3CD11F}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "CollisionAvoidanceTests", "Algorithm\Tests\CollisionAvoidanceTests.vcxproj", "{610D01B2-7EB0-44ED-9547-E935013887C5}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "CollisionAvoidancePreview", "Algorithm\tools\CollisionAvoidancePreview.vcxproj", "{99A5914E-AFE1-429A-B8D9-C739EB0D8ACD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -47,6 +51,18 @@ Global
 		{D866DBBD-620D-4AE0-B443-FF5C6F3CD11F}.Release|x64.ActiveCfg = Release|x64
 		{D866DBBD-620D-4AE0-B443-FF5C6F3CD11F}.Release|x64.Build.0 = Release|x64
 		{D866DBBD-620D-4AE0-B443-FF5C6F3CD11F}.Release|x86.ActiveCfg = Release|x64
+		{610D01B2-7EB0-44ED-9547-E935013887C5}.Debug|x64.ActiveCfg = Debug|x64
+		{610D01B2-7EB0-44ED-9547-E935013887C5}.Debug|x64.Build.0 = Debug|x64
+		{610D01B2-7EB0-44ED-9547-E935013887C5}.Debug|x86.ActiveCfg = Debug|x64
+		{610D01B2-7EB0-44ED-9547-E935013887C5}.Release|x64.ActiveCfg = Release|x64
+		{610D01B2-7EB0-44ED-9547-E935013887C5}.Release|x64.Build.0 = Release|x64
+		{610D01B2-7EB0-44ED-9547-E935013887C5}.Release|x86.ActiveCfg = Release|x64
+		{99A5914E-AFE1-429A-B8D9-C739EB0D8ACD}.Debug|x64.ActiveCfg = Debug|x64
+		{99A5914E-AFE1-429A-B8D9-C739EB0D8ACD}.Debug|x64.Build.0 = Debug|x64
+		{99A5914E-AFE1-429A-B8D9-C739EB0D8ACD}.Debug|x86.ActiveCfg = Debug|x64
+		{99A5914E-AFE1-429A-B8D9-C739EB0D8ACD}.Release|x64.ActiveCfg = Release|x64
+		{99A5914E-AFE1-429A-B8D9-C739EB0D8ACD}.Release|x64.Build.0 = Release|x64
+		{99A5914E-AFE1-429A-B8D9-C739EB0D8ACD}.Release|x86.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

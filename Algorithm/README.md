@@ -68,6 +68,30 @@ Algorithm/Formations/HersheyFont.cpp
 - B 只生成目标槽位，C 负责移动和状态发布；
 - V1 不承诺飞行过程无穿模。
 
+## V2 无人机间避碰
+
+V2 在 `CollisionAvoidance` 子目录增加独立的二维速度安全过滤器。C 先生成并初步限幅基础期望速度，再调用：
+
+```cpp
+#include "CollisionAvoidance.h"
+
+const auto result = SwarmAvoidance::ComputeSafeVelocity(request);
+// C 对 result.safe_velocity 执行动力学限幅、位置更新和状态广播。
+```
+
+接口约束：
+
+- B 只返回安全期望速度，不更新位置、不执行动力学、不读取 DDS；
+- 请求包含本机编号、位置、当前速度、C 的期望速度、目标槽位、邻机状态、`dt` 和可配置动力学上限；
+- `dt` 不得硬编码为 `0.1`，当前 10 Hz 调用方传入 `0.1`；
+- 碰撞预测使用相对位置和相对速度计算预测时间窗内的最近距离；
+- 危险时组合远离分量与侧向分量，使用 `drone_id` 生成确定性对头分流方向；
+- 已到达且期望速度为零的本机保持静止，但其他移动无人机仍应将它作为静止邻机避让；
+- `safe_distance`、预警距离、预测时间、速度和加减速度上限均来自配置，不写死在算法中；
+- 相同输入必须产生相同输出，禁止使用不可复现的随机扰动。
+
+`CollisionAvoidanceTests` 是不依赖 Qt、DDS 和 Drone 工程的自动测试项目；`CollisionAvoidancePreview` 会生成轨迹 SVG 和逐周期 CSV，用于检查最小机间距离、对头死锁、交叉汇聚和终点抖动。
+
 ## 测试
 
 `Tests/FormationAlgorithmTests.cpp` 覆盖四种基础队形、`S`、`AI`、`DDS`、`中`、`爱`、`无人机`、非法输入、输入上限、各底层生成器的 `N == 0` 防御、确定性、重复槽位、间距和 `N == 1`。高密度中文还会检查最近邻平均距离与最大/最小比，避免只满足最小安全距离却整体松散。笔画细化最多执行 64 轮，避免异常字体阻塞业务线程。
