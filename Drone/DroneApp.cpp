@@ -71,6 +71,7 @@ void DroneApp::OnCommandReceived(const SharedMessage::DroneCmd& cmd) {
     case SharedMessage::CMD_FORMATION: {
         // 1. 缓存主控端发来的最新队形参数
         current_formation_id_ = (cmd.cmd_type == SharedMessage::CMD_TAKEOFF && cmd.formation_id == 0) ? 0 : cmd.formation_id;
+        current_formation_text_ = cmd.formation_text ? cmd.formation_text : "";
         current_center_x_ = cmd.target_x;
         current_center_y_ = cmd.target_y;
         current_spacing_ = cmd.spacing > 0.0 ? cmd.spacing : 2.0;
@@ -291,6 +292,7 @@ void DroneApp::TriggerRearrangement(const std::vector<unsigned long>& alive_ids)
     // 3. 拿着新的总人数和老参数，找 B 模块要新槽位
     SwarmFormation::FormationRequest req;
     req.formation_id = current_formation_id_;
+    req.formation_text = current_formation_text_;
     req.count = sorted_ids.size(); // 【核心】传入新的存活总数
     req.center_x = current_center_x_;
     req.center_y = current_center_y_;
@@ -308,5 +310,9 @@ void DroneApp::TriggerRearrangement(const std::vector<unsigned long>& alive_ids)
         std::cout << "[自治重排] 无人机 #" << drone_id_
             << " 获取新索引 " << new_my_index
             << "，前往新槽位 (" << target_x_ << ", " << target_y_ << ")\n";
+    }else {
+        // [补回防坑神器] 如果算法报错，打印 B 模块提供的规范错误信息
+        std::cerr << "[Drone " << drone_id_ << " 算法拒载] "
+            << SwarmFormation::FormationErrorMessage(result.error) << std::endl;
     }
 }
