@@ -31,8 +31,8 @@ void CoordinateMapper::autoFit(QGraphicsView* view,
 
     double dx = maxX - minX;
     double dy = maxY - minY;
-    if (dx < 400.0) dx = 400.0;
-    if (dy < 400.0) dy = 400.0;
+    if (dx < 60.0) dx = 60.0;
+    if (dy < 60.0) dy = 60.0;
 
     double padX = dx * padding;
     double padY = dy * padding;
