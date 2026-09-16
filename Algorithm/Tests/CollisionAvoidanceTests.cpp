@@ -77,7 +77,6 @@ SimulationResult Simulate(
     int steps = 300,
     double cruise_speed = 1.3) {
     constexpr double dt = 0.1;
-    constexpr double safe_distance = 0.8;
     SimulationResult summary;
 
     for (int step = 0; step < steps; ++step) {
@@ -94,25 +93,30 @@ SimulationResult Simulate(
             request.desired_velocity = DirectionToTarget(drones[i], cruise_speed);
             request.target_position = drones[i].target;
             request.dt = dt;
-            request.config.safe_distance = safe_distance;
-            request.config.warning_distance = 1.3;
-            request.config.prediction_horizon = 2.5;
-            request.config.max_speed = 3.0;
-            request.config.max_acceleration = 2.0;
-            request.config.max_deceleration = 3.0;
-            request.config.max_lateral_acceleration = 2.5;
-            request.config.arrival_tolerance = 0.05;
+            request.config.avoidance_params.drone_radius = 0.5;
+            request.config.avoidance_params.safety_margin = 1.0;
+            request.config.dynamics_limits_2d.v_max = 5.0;
+            request.config.dynamics_limits_2d.a_max_acc = 3.0;
+            request.config.dynamics_limits_2d.a_max_dec = 5.0;
+            request.config.dynamics_limits_2d.a_max_lat = 4.0;
+            request.arrival_tolerance = 0.05;
 
             for (std::size_t j = 0; j < drones.size(); ++j) {
                 if (i != j) {
-                    request.neighbors.push_back({drones[j].id,
-                        drones[j].position, drones[j].velocity});
+                    NeighborState neighbor;
+                    neighbor.drone_id = drones[j].id;
+                    neighbor.position = drones[j].position;
+                    neighbor.velocity = drones[j].velocity;
+                    neighbor.motion_state = drones[j].fixed
+                        ? NeighborMotionState::Arrived
+                        : NeighborMotionState::Moving;
+                    request.neighbors.push_back(neighbor);
                 }
             }
             const auto filtered = SwarmAvoidance::ComputeSafeVelocity(request);
             next_velocities[i] = ApplySimulatedDynamics(
                 drones[i].velocity, filtered.safe_velocity,
-                request.config.max_lateral_acceleration * dt);
+                request.config.dynamics_limits_2d.a_max_lat * dt);
         }
 
         for (std::size_t i = 0; i < drones.size(); ++i) {
@@ -147,13 +151,12 @@ CollisionAvoidanceRequest BaseRequest() {
     request.desired_velocity = {1.0, 0.0};
     request.target_position = {5.0, 0.0};
     request.dt = 0.1;
-    request.config.safe_distance = 1.0;
-    request.config.warning_distance = 1.5;
-    request.config.prediction_horizon = 3.0;
-    request.config.max_speed = 5.0;
-    request.config.max_acceleration = 2.0;
-    request.config.max_deceleration = 3.0;
-    request.config.max_lateral_acceleration = 2.5;
+    request.config.avoidance_params.drone_radius = 0.5;
+    request.config.avoidance_params.safety_margin = 1.0;
+    request.config.dynamics_limits_2d.v_max = 5.0;
+    request.config.dynamics_limits_2d.a_max_acc = 3.0;
+    request.config.dynamics_limits_2d.a_max_dec = 5.0;
+    request.config.dynamics_limits_2d.a_max_lat = 4.0;
     return request;
 }
 
@@ -191,7 +194,7 @@ void TestNearbySeparatingNeighborPassThrough() {
     request.current_velocity = {-1.0, 0.0};
     request.desired_velocity = {-1.0, 0.0};
     request.target_position = {-5.0, 0.0};
-    request.neighbors.push_back({2, {1.2, 0.0}, {1.0, 0.0}});
+    request.neighbors.push_back({2, {2.2, 0.0}, {1.0, 0.0}});
     const auto result = SwarmAvoidance::ComputeSafeVelocity(request);
     Check(result.status == AvoidanceStatus::Safe && !result.modified,
         "nearby drones moving apart should not keep avoiding");
@@ -228,7 +231,8 @@ void TestCrossingTrajectories() {
     const auto result = SwarmAvoidance::ComputeSafeVelocity(request);
     Check(result.status == AvoidanceStatus::Avoiding,
         "crossing trajectories should trigger avoidance");
-    Check(result.predicted_min_distance < request.config.safe_distance,
+    Check(result.predicted_min_distance <
+        2.0 * request.config.avoidance_params.drone_radius + request.config.avoidance_params.safety_margin,
         "crossing prediction should report unsafe closest distance");
 }
 
@@ -293,7 +297,7 @@ void TestLowSpeedCorrectionRemainsSmall() {
     Check(result.status == AvoidanceStatus::Avoiding,
         "low-speed conflict should still be detected");
     Check(Length(correction) <=
-        request.config.max_lateral_acceleration * request.dt + 1e-9,
+        request.config.dynamics_limits_2d.a_max_lat * request.dt + 1e-9,
         "low-speed drone must not receive a disproportionate correction");
 }
 
@@ -309,7 +313,7 @@ void TestMultipleNeighborsRemainBounded() {
     const auto result = SwarmAvoidance::ComputeSafeVelocity(request);
     Check(result.status == AvoidanceStatus::Avoiding,
         "multiple threats should trigger avoidance");
-    Check(Length(result.safe_velocity) <= request.config.max_speed + 1e-9,
+    Check(Length(result.safe_velocity) <= request.config.dynamics_limits_2d.v_max + 1e-9,
         "multiple-neighbor correction must stay within max speed");
 }
 
@@ -339,7 +343,7 @@ void TestDeterministicAndSpeedLimited() {
     Check(Near(first.safe_velocity.x, second.safe_velocity.x) &&
         Near(first.safe_velocity.y, second.safe_velocity.y),
         "same input should produce exactly the same velocity");
-    Check(Length(first.safe_velocity) <= request.config.max_speed + 1e-9,
+    Check(Length(first.safe_velocity) <= request.config.dynamics_limits_2d.v_max + 1e-9,
         "output velocity must be limited");
 }
 
@@ -356,12 +360,26 @@ void TestDifferentControlPeriods() {
         "algorithm should support different positive dt values");
 }
 
+void TestMissingSharedDynamicsConfigurationIsRejected() {
+    CollisionAvoidanceRequest request;
+    request.drone_id = 1;
+    request.current_position = {0.0, 0.0};
+    request.current_velocity = {0.0, 0.0};
+    request.desired_velocity = {1.0, 0.0};
+    request.target_position = {5.0, 0.0};
+    request.dt = 0.1;
+    request.config.dynamics_limits_2d.v_max = 0.0;
+    Check(SwarmAvoidance::ComputeSafeVelocity(request).status ==
+        AvoidanceStatus::InvalidInput,
+        "missing C/B shared dynamics limits must be rejected");
+}
+
 void TestDynamicHeadOnScenario() {
     const SimulationResult result = Simulate({
         {1, {-6.0, 0.0}, {0.0, 0.0}, {6.0, 0.0}},
         {2, {6.0, 0.0}, {0.0, 0.0}, {-6.0, 0.0}}
     });
-    Check(result.minimum_distance >= 0.8,
+    Check(result.minimum_distance >= 2.0,
         "dynamic head-on scenario must preserve safe distance");
     Check(result.maximum_target_error <= 0.1,
         "dynamic head-on scenario should still reach both targets");
@@ -372,7 +390,7 @@ void TestDynamicCrossingScenario() {
         {1, {-5.0, 0.0}, {0.0, 0.0}, {5.0, 0.0}},
         {2, {0.0, -5.0}, {0.0, 0.0}, {0.0, 5.0}}
     });
-    Check(result.minimum_distance >= 0.8,
+    Check(result.minimum_distance >= 2.0,
         "dynamic crossing scenario must preserve safe distance");
     Check(result.maximum_target_error <= 0.1,
         "dynamic crossing scenario should still reach both targets");
@@ -383,10 +401,21 @@ void TestDynamicStationaryNeighborScenario() {
         {1, {-5.0, 0.0}, {0.0, 0.0}, {5.0, 0.0}},
         {2, {0.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, true}
     });
-    Check(result.minimum_distance >= 0.8,
+    Check(result.minimum_distance >= 2.0,
         "moving drone must avoid an arrived stationary drone");
     Check(result.maximum_target_error <= 0.1,
         "moving drone should recover its route after avoiding a stationary drone");
+}
+
+void TestArrivedObstacleDoesNotTrapMover() {
+    const SimulationResult result = Simulate({
+        {1, {-2.2, 0.0}, {0.0, 0.0}, {5.0, 0.0}},
+        {2, {0.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, true}
+    }, 450, 1.3);
+    Check(result.minimum_distance >= 2.0,
+        "mover starting near an arrived drone must preserve safety distance");
+    Check(result.maximum_target_error <= 0.1,
+        "mover must go around an arrived drone instead of sticking to it");
 }
 
 void TestDynamicThreeWayScenario() {
@@ -395,10 +424,32 @@ void TestDynamicThreeWayScenario() {
         {2, {6.0, 0.0}, {0.0, 0.0}, {-6.0, 0.0}},
         {3, {0.0, -4.0}, {0.0, 0.0}, {0.0, 4.0}}
     });
-    Check(result.minimum_distance >= 0.8,
+    Check(result.minimum_distance >= 2.0,
         "dynamic three-way scenario must preserve safe distance");
     Check(result.maximum_target_error <= 0.1,
         "dynamic three-way scenario should reach all targets");
+}
+
+void TestHighSpeedHeadOnScenario() {
+    const SimulationResult result = Simulate({
+        {1, {-18.0, 0.0}, {0.0, 0.0}, {18.0, 0.0}},
+        {2, {18.0, 0.0}, {0.0, 0.0}, {-18.0, 0.0}}
+    }, 650, 5.0);
+    Check(result.minimum_distance >= 2.0,
+        "5 m/s head-on scenario must preserve circular safety distance");
+    Check(result.maximum_target_error <= 0.1,
+        "5 m/s head-on scenario must recover and reach both targets");
+}
+
+void TestHighSpeedCrossingScenario() {
+    const SimulationResult result = Simulate({
+        {1, {-15.0, 0.0}, {0.0, 0.0}, {15.0, 0.0}},
+        {2, {0.0, -15.0}, {0.0, 0.0}, {0.0, 15.0}}
+    }, 650, 5.0);
+    Check(result.minimum_distance >= 2.0,
+        "5 m/s crossing scenario must preserve circular safety distance");
+    Check(result.maximum_target_error <= 0.1,
+        "5 m/s crossing scenario must not orbit instead of arriving");
 }
 
 } // namespace
@@ -418,10 +469,14 @@ int main() {
     TestInvalidInput();
     TestDeterministicAndSpeedLimited();
     TestDifferentControlPeriods();
+    TestMissingSharedDynamicsConfigurationIsRejected();
     TestDynamicHeadOnScenario();
     TestDynamicCrossingScenario();
     TestDynamicStationaryNeighborScenario();
+    TestArrivedObstacleDoesNotTrapMover();
     TestDynamicThreeWayScenario();
+    TestHighSpeedHeadOnScenario();
+    TestHighSpeedCrossingScenario();
 
     if (failures == 0) {
         std::cout << "All collision-avoidance tests passed.\n";
