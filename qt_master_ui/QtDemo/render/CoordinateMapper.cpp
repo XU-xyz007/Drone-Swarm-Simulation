@@ -31,8 +31,10 @@ void CoordinateMapper::autoFit(QGraphicsView* view,
 
     double dx = maxX - minX;
     double dy = maxY - minY;
-    if (dx < 400.0) dx = 400.0;
-    if (dy < 400.0) dy = 400.0;
+    // Keep small formations legible while allowing the scene to expand for
+    // larger formations. Drone bodies are rendered with a 0.5 m radius.
+    if (dx < 100.0) dx = 100.0;
+    if (dy < 100.0) dy = 100.0;
 
     double padX = dx * padding;
     double padY = dy * padding;

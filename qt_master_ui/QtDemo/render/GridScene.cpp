@@ -1,6 +1,7 @@
 #include "GridScene.h"
 #include <QPainter>
 #include <QGraphicsView>
+#include <algorithm>
 #include <cmath>
 
 GridScene::GridScene(QObject* parent)
@@ -65,33 +66,38 @@ void GridScene::drawForeground(QPainter* painter, const QRectF& rect) {
     double left = std::floor(visibleRect.left() / gridInterval) * gridInterval;
     double top = std::floor(visibleRect.top() / gridInterval) * gridInterval;
 
-    QPen labelPen(m_labelColor);
-    painter->setPen(labelPen);
-    QFont font("Consolas", 9);
-    painter->setFont(font);
-
-    QFontMetrics fm(font);
-    const int labelHeight = fm.height();
-    const int labelPadding = 4;
-
-    QRectF viewportRect = view->viewport()->rect();
-    double marginX = 30.0 / view->transform().m11();
-    double marginY = 20.0 / view->transform().m22();
+    const double scaleX = std::max(0.001, std::abs(view->transform().m11()));
+    const double scaleY = std::max(0.001, std::abs(view->transform().m22()));
+    const double marginX = 42.0 / scaleX;
+    const double marginY = 28.0 / scaleY;
 
     visibleRect.adjust(marginX, marginY, -marginX, -marginY);
+
+    // Labels are painted in viewport pixels rather than scene coordinates, so
+    // their size remains stable when the user zooms the map.
+    painter->save();
+    painter->resetTransform();
+    painter->setPen(QPen(m_labelColor));
+    QFont font("Consolas");
+    font.setPixelSize(13);
+    painter->setFont(font);
+    const QFontMetrics fm(font);
+    const QRect viewportRect = view->viewport()->rect();
 
     for (double x = left; x <= visibleRect.right(); x += gridInterval) {
         if (x < visibleRect.left() || x > visibleRect.right()) continue;
         QString label = QString::number(x, 'f', (gridInterval >= 1.0) ? 0 : 1);
-        QPointF scenePos(x, visibleRect.bottom());
-        QPoint viewPos = view->mapFromScene(scenePos);
-        painter->drawText(QPointF(x, visibleRect.bottom() + marginY * 0.6), label);
+        const QPoint viewPos = view->mapFromScene(QPointF(x, visibleRect.bottom()));
+        painter->drawText(viewPos.x() - fm.horizontalAdvance(label) / 2,
+                          viewportRect.bottom() - 8, label);
     }
 
     for (double y = top; y <= visibleRect.bottom(); y += gridInterval) {
         if (y < visibleRect.top() || y > visibleRect.bottom()) continue;
         QString label = QString::number(-y, 'f', (gridInterval >= 1.0) ? 0 : 1);
-        QPointF scenePos(visibleRect.left(), y);
-        painter->drawText(QPointF(visibleRect.left() + marginX * 0.3, y + labelHeight * 0.3), label);
+        const QPoint viewPos = view->mapFromScene(QPointF(visibleRect.left(), y));
+        painter->drawText(8, viewPos.y() + fm.ascent() / 2, label);
     }
+
+    painter->restore();
 }

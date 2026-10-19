@@ -1,6 +1,6 @@
-#include <conio.h>    // Ìá¹© _kbhit() ºÍ _getch()
-#include <random>     // Ìá¹© std::mt19937
-#include <algorithm>  // Ìá¹© std::shuffle
+ï»¿#include <conio.h>    // æä¾› _kbhit() å’Œ _getch()
+#include <random>     // æä¾› std::mt19937
+#include <algorithm>  // æä¾› std::shuffle
 #include "DroneApp.h"
 #include <vector>
 #include <thread>
@@ -10,157 +10,209 @@
 #include <mutex>
 #include <atomic>
 
-// B Ä£¿éÒÀÀµ
+// B æ¨¡å—ä¾èµ–
 #include "FormationAlgorithm.h"
 
-// È«¾Ö½Úµã¹ÜÀí³Ø
+// å…¨å±€èŠ‚ç‚¹ç®¡ç†æ± 
 std::vector<std::shared_ptr<DroneApp>> g_apps;
 std::vector<std::thread> g_threads;
 std::mutex g_apps_mutex;
+constexpr unsigned long kMaximumDroneCount = 999;
 
-// [ĞÂÔö] Ä£ÄâÎŞÈË»úËæ»ú×¹»Ù/Ê§Áª
+std::shared_ptr<DroneApp> CreateDroneApp(unsigned long droneId,
+                                         const SharedMessage::DroneCmd& cmd) {
+    SwarmFormation::FormationRequest initReq;
+    initReq.formation_id = 0;
+    initReq.formation_text = "";
+    initReq.count = cmd.expected_count;
+    initReq.center_x = 0.0;
+    initReq.center_y = -50.0;
+    initReq.spacing = cmd.spacing > 0.0 ? cmd.spacing : 2.0;
+
+    const auto initResult = SwarmFormation::GenerateSlots(initReq);
+    double initX = 0.0;
+    double initY = -50.0;
+    const size_t index = static_cast<size_t>(droneId - 1);
+    if (initResult.success && index < initResult.slots.size()) {
+        initX = initResult.slots[index].x;
+        initY = initResult.slots[index].y;
+    }
+
+    auto app = std::make_shared<DroneApp>(droneId, initX, initY);
+    // Capture the shared_ptr so retired workers can finish safely if an ID is reused.
+    g_threads.emplace_back([app] { app->Start(); });
+    return app;
+}
+
+// [æ–°å¢] æ¨¡æ‹Ÿæ— äººæœºéšæœºå æ¯/å¤±è”
 void SimulateCrash(double ratio) {
-    std::lock_guard<std::mutex> lock(g_apps_mutex);
     std::vector<std::shared_ptr<DroneApp>> alive_drones;
 
-    // 1. É¸Ñ¡µ±Ç°ÈÔÔÚÔËĞĞµÄÎŞÈË»ú
-    for (auto& app : g_apps) {
-        // ×¢Òâ£ºÕâĞèÒªÄãÔÚ DroneApp.h ÖĞ±©Â¶³ö public: bool IsRunning() const { return running_; }
-        if (app->IsRunning()) {
-            alive_drones.push_back(app);
+    {
+        std::lock_guard<std::mutex> lock(g_apps_mutex);
+
+        // 1. ç­›é€‰å½“å‰ä»åœ¨è¿è¡Œçš„æ— äººæœº
+        for (auto& app : g_apps) {
+            // æ³¨æ„ï¼šè¿™éœ€è¦ä½ åœ¨ DroneApp.h ä¸­æš´éœ²å‡º public: bool IsRunning() const { return running_; }
+            if (app->IsRunning()) {
+                alive_drones.push_back(app);
+            }
         }
     }
 
     int kill_count = static_cast<int>(alive_drones.size() * ratio);
     if (kill_count == 0) return;
 
-    // 2. Ëæ»ú´òÂÒ´æ»îÁĞ±í
+    // 2. éšæœºæ‰“ä¹±å­˜æ´»åˆ—è¡¨
     std::random_device rd;
     std::mt19937 gen(rd());
     std::shuffle(alive_drones.begin(), alive_drones.end(), gen);
 
-    // 3. Ç¿ÖÆ¹Ø±Õ±»Ñ¡ÖĞµÄÎŞÈË»ú·¢°üÑ­»·
+    // 3. å¼ºåˆ¶å…³é—­è¢«é€‰ä¸­çš„æ— äººæœºå‘åŒ…å¾ªç¯
     for (int i = 0; i < kill_count; ++i) {
         alive_drones[i]->Stop();
     }
 
+    // 4. The simulator owns the complete survivor set. Give every survivor
+    // exactly that same ordered ID list, so a simulated loss produces one
+    // consistent reformation instead of each node guessing from its own
+    // receive cache.
+    std::vector<std::shared_ptr<DroneApp>> survivors;
+    std::vector<unsigned long> survivor_ids;
+    {
+        std::lock_guard<std::mutex> lock(g_apps_mutex);
+        for (size_t index = 0; index < g_apps.size(); ++index) {
+            const auto& app = g_apps[index];
+            if (app && app->IsRunning() && !app->IsLanding()) {
+                survivors.push_back(app);
+                survivor_ids.push_back(static_cast<unsigned long>(index + 1));
+            }
+        }
+    }
+    for (const auto& app : survivors) {
+        app->TriggerRearrangement(survivor_ids);
+    }
+
     std::cout << "\n======================================================\n";
-    std::cout << "[Í»·¢ÑİÏ°] Ç¿ĞĞ¶ÏÁª " << (ratio * 100) << "% µÄÎŞÈË»ú£¬¹² " << kill_count << " ¼ÜÒÑÊ§Áª£¡\n";
+    std::cout << "[çªå‘æ¼”ä¹ ] å¼ºè¡Œæ–­è” " << (ratio * 100) << "% çš„æ— äººæœºï¼Œå…± " << kill_count << " æ¶å·²å¤±è”ï¼\n";
+    std::cout << "[çªå‘æ¼”ä¹ ] å·²æŒ‰ " << survivor_ids.size()
+              << " æ¶å¹¸å­˜æœºç»Ÿä¸€é‡æ’ã€‚\n";
     std::cout << "======================================================\n";
 }
 
 int main(int argc, char* argv[]) {
-    std::cout << "========== ÎŞÈË»úµ××ù½Úµã¹ÜÀíÆ÷ (¾²Ä¬Ä£Ê½) ==========" << std::endl;
-    std::cout << "-> ÕıÔÚ³õÊ¼»¯ DDS Í¨ĞÅÖĞ¼ä¼ş..." << std::endl;
+    std::cout << "========== æ— äººæœºåº•åº§èŠ‚ç‚¹ç®¡ç†å™¨ (é™é»˜æ¨¡å¼) ==========" << std::endl;
+    std::cout << "-> æ­£åœ¨åˆå§‹åŒ– DDS é€šä¿¡ä¸­é—´ä»¶..." << std::endl;
 
     if (!SwarmComm::InitDDS()) {
-        std::cerr << "ZR-DDS ³õÊ¼»¯Ê§°Ü£¡ÇëÈ·±£ ZRDDS_QOS_PROFILES.xml ÔÚÍ¬Ò»Ä¿Â¼ÏÂ¡£" << std::endl;
+        std::cerr << "ZR-DDS åˆå§‹åŒ–å¤±è´¥ï¼è¯·ç¡®ä¿ ZRDDS_QOS_PROFILES.xml åœ¨åŒä¸€ç›®å½•ä¸‹ã€‚" << std::endl;
         return 1;
     }
 
-    std::cout << "-> DDS ¾ÍĞ÷¡£¹ÒÔØºóÌ¨£¬µÈ´ıÖ÷¿Ø¶Ë»½ĞÑ..." << std::endl;
+    std::cout << "-> DDS å°±ç»ªã€‚æŒ‚è½½åå°ï¼Œç­‰å¾…ä¸»æ§ç«¯å”¤é†’..." << std::endl;
 
-    // ================= 1. ¶©ÔÄÖ÷¿Ø¶ËÖ¸Áî =================
+    // ================= 1. è®¢é˜…ä¸»æ§ç«¯æŒ‡ä»¤ =================
     SwarmComm::SubscribeCmd([](const SharedMessage::DroneCmd& cmd) {
-        // [ĞÂÔö] Ê×´Î½Ó´¥ÈÕÖ¾£º½öÔÚÊÕµ½µÚÒ»ÌõÖ¸ÁîÊ±´òÓ¡Ò»´Î£¬Ö¤Ã÷Á´Â·ÒÑ´òÍ¨
         static std::atomic<bool> first_contact{ false };
         if (!first_contact.exchange(true)) {
-            std::cout << "\n[ÏµÍ³ÈÕÖ¾] Í¨ĞÅÁ´Â·´òÍ¨£¡³É¹¦½ÓÊÕµ½Ö÷¿Ø¶ËÊ×´ÎÖ¸Áî£º"
-                << "cmd_id=" << cmd.cmd_id
-                << " | Ä¿±êÊıÁ¿=" << cmd.expected_count << " ¼Ü" << std::endl;
+            std::cout << "\n[System] command link ready: cmd_id=" << cmd.cmd_id
+                      << " | target=" << cmd.expected_count << std::endl;
         }
 
-        std::lock_guard<std::mutex> lock(g_apps_mutex);
+        std::vector<std::shared_ptr<DroneApp>> appsToCommand;
+        std::vector<std::shared_ptr<DroneApp>> appsToLand;
+        std::vector<std::shared_ptr<DroneApp>> appsToCancelLanding;
+        if (cmd.cmd_type == SharedMessage::CMD_TAKEOFF ||
+            cmd.cmd_type == SharedMessage::CMD_FORMATION) {
+            const unsigned long targetCount = std::min<unsigned long>(
+                cmd.expected_count, kMaximumDroneCount);
 
-        // ¶¯Ì¬À©ÈİÓë»­Íâ½µÉúÂß¼­
-        if (cmd.cmd_type == SharedMessage::CMD_TAKEOFF || cmd.cmd_type == SharedMessage::CMD_FORMATION) {
-            int target_count = cmd.expected_count;
-            int current_count = g_apps.size();
+            {
+                std::lock_guard<std::mutex> lock(g_apps_mutex);
+                if (g_apps.size() < targetCount) g_apps.resize(targetCount);
 
-            if (target_count > current_count) {
-                int to_add = target_count - current_count;
-
-                // ¹¹ÔìÕë¶ÔĞÂÉúÎŞÈË»úµÄ¡°µØÏÂ´ı»ú¡±·½ÕóÇëÇó
-                SwarmFormation::FormationRequest init_req;
-                init_req.formation_id = 0; // ·½Õó
-                init_req.formation_text = "";
-                init_req.count = target_count;
-                init_req.center_x = 0.0;
-                init_req.center_y = -50.0; // µØÆ½ÏßÒş²ØÇø£¬ÊÊÅä A ¶Ë Y>0 µÄäÖÈ¾¹ıÂË
-                init_req.spacing = cmd.spacing > 0.0 ? cmd.spacing : 2.0;
-
-                const auto init_result = SwarmFormation::GenerateSlots(init_req);
-
-                for (int i = 0; i < to_add; ++i) {
-                    unsigned long new_id = current_count + 1 + i;
-                    unsigned int my_index = new_id - 1;
-
-                    double init_x = 0.0;
-                    double init_y = -50.0;
-
-                    // ¶ÁÈ¡ B Ä£¿éËã³öµÄ²ÛÎ»½øĞĞ½µÉú
-                    if (init_result.success && my_index < init_result.slots.size()) {
-                        init_x = init_result.slots[my_index].x;
-                        init_y = init_result.slots[my_index].y;
+                // IDs 1..targetCount remain active. Recreate only instances
+                // that already completed a planned landing and exited.
+                for (unsigned long id = 1; id <= targetCount; ++id) {
+                    auto& app = g_apps[id - 1];
+                    if (!app || !app->IsRunning()) {
+                        app = CreateDroneApp(id, cmd);
+                    } else if (app->IsLanding()) {
+                        appsToCancelLanding.push_back(app);
                     }
-
-                    auto app = std::make_shared<DroneApp>(new_id, init_x, init_y);
-                    g_apps.push_back(app);
-                    g_threads.emplace_back(&DroneApp::Start, app.get());
-
-                    // ÈÃĞÂÉúÎŞÈË»úÁ¢¿ÌÖ´ĞĞµ±Ç°±äÕóÃüÁî²¢Éı¿Õ
-                    app->OnCommandReceived(cmd);
-
-                    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                    appsToCommand.push_back(app);
                 }
+
+                // Scale-down: higher IDs land visually and do not receive
+                // the new formation command.
+                for (size_t index = targetCount; index < g_apps.size(); ++index) {
+                    if (g_apps[index] && g_apps[index]->IsRunning() &&
+                        !g_apps[index]->IsLanding()) {
+                        appsToLand.push_back(g_apps[index]);
+                    }
+                }
+            }
+
+            for (const auto& app : appsToCancelLanding) app->CancelLanding();
+            for (const auto& app : appsToLand) app->BeginLanding();
+            for (const auto& app : appsToCommand) app->OnCommandReceived(cmd);
+            return;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(g_apps_mutex);
+            for (const auto& app : g_apps) {
+                if (app && app->IsRunning()) appsToCommand.push_back(app);
             }
         }
 
-        // ÎŞÂÛÊÇ·ñÀ©Èİ£¬¶¼½«ĞÂÖ¸Áî·Ö·¢¸øËùÓĞ´æ»îµÄÊµÌåÊµÀı
-        for (auto& app : g_apps) {
-            app->OnCommandReceived(cmd);
-        }
-        });
-
-    // ================= 2. ¶©ÔÄÁÚ¾Ó×´Ì¬¸üĞÂ =================
+        // Landing reaches every currently active drone, regardless of the UI N field.
+        for (const auto& app : appsToCommand) app->OnCommandReceived(cmd);
+    });
+    // ================= 2. è®¢é˜…é‚»å±…çŠ¶æ€æ›´æ–° =================
     SwarmComm::SubscribeState([](const SharedMessage::DroneState& state) {
-        std::lock_guard<std::mutex> lock(g_apps_mutex);
-        for (auto& app : g_apps) {
-            app->OnStateReceived(state);
+        std::vector<std::shared_ptr<DroneApp>> activeApps;
+        {
+            std::lock_guard<std::mutex> lock(g_apps_mutex);
+            for (const auto& app : g_apps) {
+                if (app && app->IsRunning() && !app->IsLanding()) {
+                    activeApps.push_back(app);
+                }
+            }
         }
-        });
-
-    // ================= 3. ÊØ»¤½ø³ÌÖ÷Ñ­»· (´ø¼üÅÌ¼àÌıÓëÒÇ±íÅÌ) =================
+        for (const auto& app : activeApps) app->OnStateReceived(state);
+    });
+    // ================= 3. å®ˆæŠ¤è¿›ç¨‹ä¸»å¾ªç¯ (å¸¦é”®ç›˜ç›‘å¬ä¸ä»ªè¡¨ç›˜) =================
     auto last_print_time = std::chrono::steady_clock::now();
 
     while (true) {
-        // 1. ·Ç×èÈû°´¼ü¼àÌı (²»¿¨¶Ù)
+        // 1. éé˜»å¡æŒ‰é”®ç›‘å¬ (ä¸å¡é¡¿)
         if (_kbhit()) {
             char ch = _getch();
             switch (ch) {
-            case '1': SimulateCrash(0.10); break; // É± 10%
-            case '2': SimulateCrash(0.15); break; // É± 15%
-            case '3': SimulateCrash(0.20); break; // É± 20%
-            case '4': SimulateCrash(0.30); break; // É± 30%
+            case '1': SimulateCrash(0.10); break; // æ€ 10%
+            case '2': SimulateCrash(0.15); break; // æ€ 15%
+            case '3': SimulateCrash(0.20); break; // æ€ 20%
+            case '4': SimulateCrash(0.30); break; // æ€ 30%
             default: break;
             }
         }
 
-        // 2. Î¬³ÖÔ­ÓĞµÄÒÇ±íÅÌ´òÓ¡Âß¼­ (Ã¿ 2 Ãë´òÓ¡Ò»´Î£¬·ÀÖ¹Ë¢ÆÁ)
+        // 2. ç»´æŒåŸæœ‰çš„ä»ªè¡¨ç›˜æ‰“å°é€»è¾‘ (æ¯ 2 ç§’æ‰“å°ä¸€æ¬¡ï¼Œé˜²æ­¢åˆ·å±)
         auto now = std::chrono::steady_clock::now();
         if (std::chrono::duration_cast<std::chrono::seconds>(now - last_print_time).count() >= 2) {
             last_print_time = now;
 
             std::lock_guard<std::mutex> lock(g_apps_mutex);
             if (!g_apps.empty()) {
-                // Í³¼ÆÕæÕı´æ»îµÄÊıÁ¿
+                // ç»Ÿè®¡çœŸæ­£å­˜æ´»çš„æ•°é‡
                 int alive_count = 0;
                 for (auto& app : g_apps) {
                     if (app->IsRunning()) alive_count++;
                 }
 
-                std::cout << "\n=== [ºóÌ¨¼à¿Ø] µ±Ç°¼¯Èº×Ü¹æÄ£: " << g_apps.size()
-                    << " ¼Ü | ´æ»î: " << alive_count << " ¼Ü ===" << std::endl;
+                std::cout << "\n=== [åå°ç›‘æ§] å½“å‰é›†ç¾¤æ€»è§„æ¨¡: " << g_apps.size()
+                    << " æ¶ | å­˜æ´»: " << alive_count << " æ¶ ===" << std::endl;
 
                 int print_count = g_apps.size() > 3 ? 3 : g_apps.size();
                 for (int i = 0; i < print_count; ++i) {
@@ -169,7 +221,7 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // Ã¿´ÎÑ­»·ÉÔÎ¢ĞİÏ¢Ò»ÏÂ£¬·ÀÖ¹´òÂú CPU µ¥ºË
+        // æ¯æ¬¡å¾ªç¯ç¨å¾®ä¼‘æ¯ä¸€ä¸‹ï¼Œé˜²æ­¢æ‰“æ»¡ CPU å•æ ¸
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
 

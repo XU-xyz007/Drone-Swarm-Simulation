@@ -51,10 +51,20 @@ DroneStateDDS SwarmControlCModule::RunLoop(double current_time_sec, double dt) {
     b_req.current_velocity = { vel_x_, vel_y_ };
     b_req.desired_velocity = { intent_vx, intent_vy };
     b_req.target_position = { target_x_, target_y_ };
-    // C and B use the same physical limits and circular-body parameters.
-    b_req.config = config_;
-    b_req.arrival_tolerance = config_.control_gains.deadband_radius;
-    b_req.stopped_speed_tolerance = 0.1;
+
+    // 动力学参数直接使用你头文件中配置的 50/15/30/15，保持高速设置
+    b_req.config.max_speed = config_.dynamics_limits_2d.v_max;
+    b_req.config.max_acceleration = config_.dynamics_limits_2d.a_max_acc;
+    b_req.config.max_deceleration = config_.dynamics_limits_2d.a_max_dec;
+    b_req.config.max_lateral_acceleration = config_.dynamics_limits_2d.a_max_lat;
+    b_req.config.arrival_tolerance = config_.control_gains.deadband_radius;
+
+    // 填充 B 模块需要的防撞判定参数 (针对 50m/s 飙车级调整)
+    b_req.config.safe_distance = 2.0;          // 【护盾大小】设为 5 米，确保 UI 贴图绝对不会碰在一起
+    b_req.config.warning_distance = 5.0;      // 【预警距离】速度快，必须提早在 40 米外就开始让路
+    b_req.config.prediction_horizon = 2.5;     // 【预测视野】往前预测 3 秒
+    b_req.config.stopped_speed_tolerance = 0.1;
+    b_req.config.avoidance_gain = 0.5;         // 【避障意愿】稍微调高一点，让它躲避得更猛烈
 
     // 3. 转换邻居状态，建立 Arrived 映射
     for (const auto& kv : neighbors_) {

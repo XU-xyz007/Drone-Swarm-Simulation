@@ -1,4 +1,4 @@
-module SharedMessage
+﻿module SharedMessage
 {
     // --- 状态枚举 ---
     enum DroneStatus {

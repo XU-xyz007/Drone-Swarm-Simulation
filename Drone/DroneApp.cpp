@@ -1,8 +1,10 @@
 ﻿#include "DroneApp.h"
 #include <algorithm>
-#include <iostream>
-#include <sstream>
-#include <thread> // 引入线程支持
+#include <thread>   // 引入线程支持
+#include <sstream>  // 引入字符流支持，防止多线程打印错乱
+
+// 【核心修复】初始化静态全局算力锁，保护模拟器 CPU
+std::mutex DroneApp::rearrangement_mutex_;
 
 DroneApp::DroneApp(unsigned long id, double init_x, double init_y)
     : drone_id_(id), cur_x_(init_x), cur_y_(init_y),
@@ -36,6 +38,31 @@ void DroneApp::Stop() {
     PublishCurrentState();
 }
 
+void DroneApp::BeginLanding() {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    if (!running_ || landing_) return;
+
+    // This project is two-dimensional: a landing is represented by holding
+    // position, publishing ST_LANDED briefly for the UI, then ending the app.
+    landing_ = true;
+    landing_started_at_ = std::chrono::steady_clock::now();
+    target_x_ = cur_x_;
+    target_y_ = cur_y_;
+    cur_vx_ = 0.0;
+    cur_vy_ = 0.0;
+    is_moving_ = false;
+    current_status_ = SharedMessage::ST_LANDED;
+    if (c_module_) c_module_->SetTarget(cur_x_, cur_y_);
+}
+
+void DroneApp::CancelLanding() {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    if (!running_ || !landing_) return;
+
+    landing_ = false;
+    current_status_ = SharedMessage::ST_HOVER;
+}
+
 void DroneApp::OnStateReceived(const SharedMessage::DroneState& state) {
     if (state.drone_id == drone_id_) return;
 
@@ -64,8 +91,8 @@ void DroneApp::OnStateReceived(const SharedMessage::DroneState& state) {
 void DroneApp::OnCommandReceived(const SharedMessage::DroneCmd& cmd) {
     std::vector<unsigned long> alive_ids;
     bool trigger_rearrange = false;
-    SwarmFormation::FormationRequest snapshot_req; // 【核心修复】保存参数快照
 
+    // 【核心修复 1】缩小锁范围，仅用于更新物理和业务状态，坚决不在锁里算阵型
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
 
@@ -83,13 +110,14 @@ void DroneApp::OnCommandReceived(const SharedMessage::DroneCmd& cmd) {
             current_center_x_ = cmd.target_x;
             current_center_y_ = cmd.target_y;
             current_spacing_ = cmd.spacing > 0.0 ? cmd.spacing : 2.0;
+            active_expected_count_ = cmd.expected_count;
 
-            // 制作快照，供异步线程安全使用，防止数据竞争导致文字丢失
-            snapshot_req.formation_id = current_formation_id_;
-            snapshot_req.formation_text = current_formation_text_;
-            snapshot_req.center_x = current_center_x_;
-            snapshot_req.center_y = current_center_y_;
-            snapshot_req.spacing = current_spacing_;
+            // A planned scale-down removes the high IDs from this formation. Keep
+            // old failover observations for active IDs only.
+            confirmed_dead_.erase(
+                std::remove_if(confirmed_dead_.begin(), confirmed_dead_.end(),
+                    [this](unsigned long id) { return id > active_expected_count_; }),
+                confirmed_dead_.end());
 
             // 2. 梳理存活名单
             for (unsigned long i = 1; i <= cmd.expected_count; ++i) {
@@ -97,6 +125,7 @@ void DroneApp::OnCommandReceived(const SharedMessage::DroneCmd& cmd) {
                     alive_ids.push_back(i);
                 }
             }
+
             trigger_rearrange = true;
             break;
         }
@@ -112,12 +141,16 @@ void DroneApp::OnCommandReceived(const SharedMessage::DroneCmd& cmd) {
             break;
         }
         case SharedMessage::CMD_LAND: {
+            // Avoid calling BeginLanding here: state_mutex_ is already held.
+            landing_ = true;
+            landing_started_at_ = std::chrono::steady_clock::now();
             target_x_ = cur_x_;
             target_y_ = cur_y_;
             is_moving_ = false;
             cur_vx_ = 0.0;
             cur_vy_ = 0.0;
             current_status_ = SharedMessage::ST_LANDED;
+            if (c_module_) c_module_->SetTarget(cur_x_, cur_y_);
             break;
         }
         default:
@@ -125,18 +158,21 @@ void DroneApp::OnCommandReceived(const SharedMessage::DroneCmd& cmd) {
         }
 
         last_cmd_id_ = cmd.cmd_id;
-    } // <--- 锁在这里被释放
+    } // <--- 网络接收线程在这里彻底解放！不会因为算力卡住而丢包！
 
-    // 【核心修复】将重排扔进后台，让网络接收线程瞬间返回，绝不卡死心跳！
+    // 【核心修复 2】扔进异步线程池算，不卡 DDS 心跳
     if (trigger_rearrange) {
-        std::thread([this, alive_ids, snapshot_req]() {
-            TriggerRearrangement(alive_ids, snapshot_req);
+        std::thread([this, alive_ids]() {
+            TriggerRearrangement(alive_ids);
             }).detach();
     }
 }
 
 void DroneApp::RunLoop() {
     auto last_loop_time = std::chrono::steady_clock::now();
+    // C reports a newly suspected lost ID only once. Keep unsent IDs until a
+    // DDS packet carrying them has been accepted by the writer.
+    std::vector<unsigned long> pendingLostIds;
 
     while (running_) {
         auto current_time = std::chrono::steady_clock::now();
@@ -150,67 +186,31 @@ void DroneApp::RunLoop() {
         c_output.drone_id = drone_id_;
         c_output.status = static_cast<V2DroneStatus>(current_status_);
 
-        bool new_death_detected = false;
-
         // --- 1. 执行 C 模块 10Hz 闭环 ---
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
-            if (c_module_) {
+            if (landing_) {
+                c_output.drone_id = drone_id_;
+                c_output.x = cur_x_;
+                c_output.y = cur_y_;
+                c_output.vx = 0.0;
+                c_output.vy = 0.0;
+                c_output.status = V2DroneStatus::ST_LANDED;
+            }
+            else if (c_module_) {
                 // 将最新物理状态灌入 C 模块
                 c_module_->SetCurrentState(cur_x_, cur_y_, cur_vx_, cur_vy_);
 
                 // 执行核心流水线 
                 c_output = c_module_->RunLoop(current_time_sec, dt);
 
-                // =============================================================
-                // 掉线检测与自治重排触发器
-                for (unsigned long lost_id : c_output.suspected_lost_ids) {
-                    if (std::find(confirmed_dead_.begin(), confirmed_dead_.end(), lost_id) == confirmed_dead_.end()) {
-                        confirmed_dead_.push_back(lost_id);
-                        new_death_detected = true;
-                    }
-                }
-
-                // 更新本机真实物理量
+                // 根据 C 模块的动力学计算结果更新本机真实物理量
                 cur_x_ = c_output.x;
                 cur_y_ = c_output.y;
                 cur_vx_ = c_output.vx;
                 cur_vy_ = c_output.vy;
                 current_status_ = static_cast<SharedMessage::DroneStatus>(c_output.status);
             }
-        } // <--- 提前释放 state_mutex_ 锁
-
-        // 2. 只要名单有更新，立刻集结剩下的人重排
-        if (new_death_detected) {
-            std::vector<unsigned long> alive_ids;
-            SwarmFormation::FormationRequest snapshot_req;
-            alive_ids.push_back(drone_id_);
-
-            // 安全获取最新邻居存活名单
-            {
-                std::lock_guard<std::mutex> n_lock(neighbors_mutex_);
-                for (const auto& pair : known_drones_) {
-                    unsigned long neighbor_id = pair.first;
-                    if (std::find(confirmed_dead_.begin(), confirmed_dead_.end(), neighbor_id) == confirmed_dead_.end()) {
-                        alive_ids.push_back(neighbor_id);
-                    }
-                }
-            }
-
-            // 安全获取当前的阵型参数快照
-            {
-                std::lock_guard<std::mutex> lock(state_mutex_);
-                snapshot_req.formation_id = current_formation_id_;
-                snapshot_req.formation_text = current_formation_text_;
-                snapshot_req.center_x = current_center_x_;
-                snapshot_req.center_y = current_center_y_;
-                snapshot_req.spacing = current_spacing_;
-            }
-
-            // 【核心修复】开启异步线程执行自治重排，绝对不阻塞 RunLoop 发包！
-            std::thread([this, alive_ids, snapshot_req]() {
-                TriggerRearrangement(alive_ids, snapshot_req);
-                }).detach();
         }
 
         // --- 2. 组装并发布 IDL 结构包 ---
@@ -220,6 +220,7 @@ void DroneApp::RunLoop() {
         state.drone_id = c_output.drone_id;
         state.status = static_cast<SharedMessage::DroneStatus>(c_output.status);
 
+        // 分离读锁，安全读取将要发包的坐标
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
             state.x = cur_x_;
@@ -230,22 +231,44 @@ void DroneApp::RunLoop() {
         }
         state.seq_num = c_output.seq_num;
 
-        if (!c_output.suspected_lost_ids.empty()) {
-            state.suspected_lost_ids.ensure_length(
-                static_cast<unsigned long>(c_output.suspected_lost_ids.size()),
-                static_cast<unsigned long>(c_output.suspected_lost_ids.size())
-            );
-            for (size_t i = 0; i < c_output.suspected_lost_ids.size(); ++i) {
-                state.suspected_lost_ids[i] = c_output.suspected_lost_ids[i];
+        // DroneMessage.idl bounds suspected_lost_ids to 10 entries. 
+        constexpr size_t kMaxSuspectedLostIdsPerPacket = 10;
+        for (unsigned long id : c_output.suspected_lost_ids) {
+            if (std::find(pendingLostIds.begin(), pendingLostIds.end(), id) ==
+                pendingLostIds.end()) {
+                pendingLostIds.push_back(id);
             }
         }
 
+        const size_t batchSize = (std::min)(kMaxSuspectedLostIdsPerPacket,
+            pendingLostIds.size());
+        bool lostBatchAttached = false;
+        if (batchSize != 0 && state.suspected_lost_ids.ensure_length(
+            static_cast<unsigned long>(batchSize),
+            static_cast<unsigned long>(batchSize))) {
+            for (size_t i = 0; i < batchSize; ++i) {
+                state.suspected_lost_ids[i] = pendingLostIds[i];
+            }
+            lostBatchAttached = true;
+        }
+
         bool ok = SwarmComm::PublishState(state);
+        if (ok && lostBatchAttached) {
+            pendingLostIds.erase(pendingLostIds.begin(),
+                pendingLostIds.begin() + batchSize);
+        }
         if (!ok) {
             std::cerr << "[网络警告] 无人机 #" << state.drone_id << " 状态包发送失败！" << std::endl;
         }
 
+        // 释放 DDS 内部深拷贝内存
         SharedMessage::DroneStateFinalize(&state);
+
+        // Keep ST_LANDED visible long enough for the controller UI to play fade-out
+        if (landing_ && std::chrono::duration_cast<std::chrono::milliseconds>(
+            current_time - landing_started_at_).count() >= 1200) {
+            running_ = false;
+        }
 
         // --- 3. 严格补偿休眠 ---
         double target_rate = c_module_ ? c_module_->GetCurrentPublishRate() : 10.0;
@@ -291,15 +314,14 @@ void DroneApp::PrintDebugStatus() {
         << " | 状态码: " << current_status_ << std::endl;
 }
 
-// 【核心修复】防止疯狂掉线时引发“线程爆炸”，保证同一时刻只有一次重排在算
-void DroneApp::TriggerRearrangement(const std::vector<unsigned long>& alive_ids, SwarmFormation::FormationRequest req) {
-    std::lock_guard<std::mutex> calc_lock(rearrangement_mutex_);
-
+void DroneApp::TriggerRearrangement(const std::vector<unsigned long>& alive_ids) {
     if (alive_ids.empty()) return;
 
+    // 1. 将所有存活的 ID 排序
     std::vector<unsigned long> sorted_ids = alive_ids;
     std::sort(sorted_ids.begin(), sorted_ids.end());
 
+    // 2. 找到我自己在存活列表中的绝对名次
     unsigned int new_my_index = 0;
     bool i_am_alive = false;
     for (size_t i = 0; i < sorted_ids.size(); ++i) {
@@ -312,20 +334,26 @@ void DroneApp::TriggerRearrangement(const std::vector<unsigned long>& alive_ids,
 
     if (!i_am_alive) return;
 
-    // 解决控制台穿插错乱问题
-    std::ostringstream oss;
-    oss << "[DEBUG 传参排查] drone_id=" << drone_id_
-        << " | formation_id=" << req.formation_id
-        << " | text=" << (req.formation_text.empty() ? "NULL/EMPTY" : req.formation_text)
-        << " | count=" << sorted_ids.size()
-        << " | center=(" << req.center_x << ", " << req.center_y << ")\n";
-    std::cout << oss.str();
+    // 【核心修复 3】从状态机中给参数“拍快照”，防止多线程竞争导致参数错乱
+    SwarmFormation::FormationRequest req;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        req.formation_id = current_formation_id_;
+        req.formation_text = current_formation_text_;
+        req.count = sorted_ids.size();
+        req.center_x = current_center_x_;
+        req.center_y = current_center_y_;
+        req.spacing = current_spacing_;
+    }
 
-    // 直接使用传进来的快照计算
-    req.count = sorted_ids.size();
-    auto result = SwarmFormation::GenerateSlots(req);
+    // 【核心修复 4】排队执行 O(N^3) 的耗时算法，保护电脑 CPU 不被海量线程撑爆
+    SwarmFormation::FormationResult result;
+    {
+        std::lock_guard<std::mutex> calc_lock(rearrangement_mutex_);
+        result = SwarmFormation::GenerateSlots(req);
+    }
 
-    // 计算完毕后，重新锁定 state_mutex_ 以应用物理参数
+    // 4. 计算完成，重新拿锁，将槽位赋予物理控制器
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         if (result.success && new_my_index < result.slots.size()) {
@@ -334,23 +362,17 @@ void DroneApp::TriggerRearrangement(const std::vector<unsigned long>& alive_ids,
             is_moving_ = true;
             if (c_module_) c_module_->SetTarget(target_x_, target_y_);
 
-            std::ostringstream oss_succ;
-            oss_succ << "[自治重排] 无人机 #" << drone_id_
+            std::ostringstream oss;
+            oss << "[自治重排] 无人机 #" << drone_id_
                 << " 获取新索引 " << new_my_index
                 << "，前往新槽位 (" << target_x_ << ", " << target_y_ << ")\n";
-            std::cout << oss_succ.str();
+            std::cout << oss.str();
         }
         else {
-            std::ostringstream oss_err;
-            oss_err << "[Drone " << drone_id_ << " 算法拒载] "
-                << SwarmFormation::FormationErrorMessage(result.error)
-                << " -> 触发安全回退：保持当前目标点继续飞行/悬停。\n";
-            std::cerr << oss_err.str();
-
-            is_moving_ = true;
-            if (c_module_) {
-                c_module_->SetTarget(target_x_, target_y_);
-            }
+            std::ostringstream oss;
+            oss << "[Drone " << drone_id_ << " 算法拒载] "
+                << SwarmFormation::FormationErrorMessage(result.error) << "\n";
+            std::cerr << oss.str();
         }
     }
 }

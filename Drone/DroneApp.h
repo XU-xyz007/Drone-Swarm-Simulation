@@ -23,17 +23,18 @@ public:
     ~DroneApp();
     void Start();
     void Stop();
+    // Planned scale-down uses a visible landed state before this instance exits.
+    void BeginLanding();
+    void CancelLanding();
 
     void OnStateReceived(const SharedMessage::DroneState& state);
     void OnCommandReceived(const SharedMessage::DroneCmd& cmd);
     void PrintDebugStatus();
-    // 1. 新增一把算力锁，防止疯狂掉线时引发“线程爆炸”把 CPU 算崩
-    std::mutex rearrangement_mutex_;
 
-    // 2. 修改重排函数的声明（增加 req 参数用于快照传递）
-    void TriggerRearrangement(const std::vector<unsigned long>& alive_ids, SwarmFormation::FormationRequest req);
+    void TriggerRearrangement(const std::vector<unsigned long>& alive_ids);
 
     bool IsRunning() const { return running_; }
+    bool IsLanding() const { return landing_; }
 
 private:
     void RunLoop();
@@ -41,6 +42,8 @@ private:
 
     unsigned long drone_id_;
     std::atomic<bool> running_{ false };
+    std::atomic<bool> landing_{ false };
+    std::chrono::steady_clock::time_point landing_started_at_;
 
     // 邻居表
     std::map<unsigned long, SharedMessage::DroneState> known_drones_;
@@ -65,12 +68,17 @@ private:
 
     std::mutex state_mutex_;
 
+    static std::mutex rearrangement_mutex_;
+
     // 在 private 区域添加：
     int current_formation_id_ = 0;
     double current_center_x_ = 0.0;
     double current_center_y_ = 0.0;
     double current_spacing_ = 2.0;
     std::string current_formation_text_ = "";
+    // IDs above this value were deliberately scaled down by the controller;
+    // they must not be interpreted as failed neighbors by C's failover path.
+    unsigned long active_expected_count_ = 0;
 
     std::vector<unsigned long> confirmed_dead_; // 记录已确认阵亡的名单
-};
+}; 

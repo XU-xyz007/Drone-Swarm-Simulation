@@ -136,6 +136,9 @@ void MainWindow::setupUi() {
 
     setupButtons(leftPanel);
     setupStressTestPanel(leftPanel);
+    if (QGroupBox* stressGroup = leftPanel->findChild<QGroupBox*>("stressGroup")) {
+        stressGroup->hide();
+    }
     leftLayout->addStretch();
 
     mainLayout->addWidget(leftPanel);
@@ -159,9 +162,9 @@ void MainWindow::setupParameterPanel(QWidget* panel) {
     QFormLayout* form = new QFormLayout(group);
 
     m_spinN = new QSpinBox();
-    m_spinN->setRange(1, 200);
+    m_spinN->setRange(1, 999);
     m_spinN->setValue(8);
-    m_spinN->setToolTip("无人机数量 (1~200)");
+    m_spinN->setToolTip("无人机数量 (1~999；较大规模会显著增加本机 CPU 与线程负载)");
     form->addRow("无人机数量 N:", m_spinN);
 
     connect(m_spinN, QOverload<int>::of(&QSpinBox::valueChanged),
@@ -207,7 +210,7 @@ void MainWindow::setupParameterPanel(QWidget* panel) {
 
     m_spinSpacing = new QDoubleSpinBox();
     m_spinSpacing->setRange(0.5, 100.0);
-    m_spinSpacing->setValue(30.0);
+    m_spinSpacing->setValue(5.0);
     m_spinSpacing->setDecimals(1);
     m_spinSpacing->setSuffix(" m");
     form->addRow("间距:", m_spinSpacing);
@@ -216,6 +219,8 @@ void MainWindow::setupParameterPanel(QWidget* panel) {
     m_chkTestMode->setToolTip("勾选后无人机按确定队形目标飞行，可验证队形完成判定");
     connect(m_chkTestMode, &QCheckBox::toggled, this, &MainWindow::onTestModeToggled);
     form->addRow(m_chkTestMode);
+    m_chkTestMode->hide();
+    form->setRowVisible(m_chkTestMode, false);
 
     QVBoxLayout* panelLayout = qobject_cast<QVBoxLayout*>(panel->layout());
     if (panelLayout) {
@@ -225,7 +230,7 @@ void MainWindow::setupParameterPanel(QWidget* panel) {
 
 void MainWindow::setupCanvas() {
     m_scene = new GridScene(this);
-    m_scene->setSceneRect(-200, -200, 400, 400);
+    m_scene->setSceneRect(-50, -50, 100, 100);
 
     m_graphicsView = new QGraphicsView(m_scene);
     m_graphicsView->setRenderHint(QPainter::Antialiasing);
@@ -363,7 +368,7 @@ void MainWindow::onFormation() {
         ? m_comboFormation->currentText().toStdString()
         : ("文字:\"" + cmd.formation_text + "\"");
     statusBar()->showMessage(QString::fromStdString(
-        "已发送队形命令 (" + formationName + ")，进度: 0/" + std::to_string(N)));
+        "已发送队形命令 (" + formationName + ")"));
     std::cout << "========== 切换队形 ==========" << std::endl;
 }
 
@@ -426,13 +431,10 @@ void MainWindow::onTestModeToggled(bool checked) {
 }
 
 void MainWindow::onCompletionCheck() {
-    auto progress = m_formationChecker->getProgress();
-    uint32_t totalCount = static_cast<uint32_t>(progress.second);
-
-    if (!m_formationCompleted) {
-        statusBar()->showMessage(QString::fromStdString(
-            "队形进行中，进度: " + std::to_string(progress.first) + "/" + std::to_string(totalCount)));
-    }
+    // Keep completion tracking active, but do not show transient progress in
+    // the status bar. The quality panel is the single source of live progress.
+    const auto progress = m_formationChecker->getProgress();
+    const uint32_t totalCount = static_cast<uint32_t>(progress.second);
 
     if (m_formationChecker->isFormationComplete() && !m_formationCompleted) {
         m_formationCompleted = true;
@@ -458,11 +460,15 @@ void MainWindow::updateDroneDisplay() {
     std::unordered_set<uint32_t> activeIds;
 
     for (const auto& state : states) {
-        if (state.status == DroneStatus::ST_LANDED) continue;
+        auto it = m_droneItems.find(state.drone_id);
+        if (state.status == DroneStatus::ST_LANDED) {
+            if (it != m_droneItems.end()) {
+                it->second->updateFromState(state);
+            }
+            continue;
+        }
 
         activeIds.insert(state.drone_id);
-
-        auto it = m_droneItems.find(state.drone_id);
         if (it == m_droneItems.end()) {
             DroneItem* item = new DroneItem(state.drone_id);
             m_scene->addItem(item);
@@ -473,6 +479,16 @@ void MainWindow::updateDroneDisplay() {
     }
 
     for (auto it = m_droneItems.begin(); it != m_droneItems.end(); ) {
+        if (it->second->isLanding()) {
+            if (it->second->advanceLandingAnimation()) {
+                m_scene->removeItem(it->second);
+                delete it->second;
+                it = m_droneItems.erase(it);
+            } else {
+                ++it;
+            }
+            continue;
+        }
         if (activeIds.find(it->first) == activeIds.end()) {
             m_scene->removeItem(it->second);
             delete it->second;
@@ -715,7 +731,19 @@ void MainWindow::detectTimedOutDrones() {
 }
 
 void MainWindow::updateQualityMetrics() {
-    const std::vector<DroneState> states = m_stateCache->getAllStates();
+    const std::vector<DroneState> allStates = m_stateCache->getAllStates();
+    std::vector<DroneState> states;
+    states.reserve(allStates.size());
+    for (const DroneState& state : allStates) {
+        // Planned landings are intentionally no longer part of the active
+        // formation once the UI starts fading them out.
+        if (state.status == DroneStatus::ST_LANDED) continue;
+        if (m_qualityTracking &&
+            m_qualityTargets.find(state.drone_id) == m_qualityTargets.end()) {
+            continue;
+        }
+        states.push_back(state);
+    }
     if (states.size() < 2) {
         m_lblMinDistance->setText("—");
         m_lblSyncError->setText(m_qualityTracking ? "等待状态" : "等待队形命令");
@@ -779,9 +807,19 @@ void MainWindow::updateQualityMetrics() {
 }
 
 bool MainWindow::beginQualityTracking(const DroneCmd& cmd) {
+    // Both user-triggered takeoff and formation commands rebuild the Drone
+    // manager's configured ID range. Start a fresh measurement run instead
+    // of retaining loss records from an earlier swarm instance.
+    if (cmd.cmd_type == DroneCmdType::CMD_TAKEOFF ||
+        cmd.cmd_type == DroneCmdType::CMD_FORMATION) {
+        m_lostDroneIds.clear();
+        m_lastSeenStates.clear();
+    }
+
     m_qualityPlan.formationId = (cmd.cmd_type == DroneCmdType::CMD_TAKEOFF && cmd.formation_id == 0)
         ? 0 : cmd.formation_id;
     m_qualityPlan.formationText = cmd.formation_text;
+    m_qualityPlan.expectedCount = cmd.expected_count;
     m_qualityPlan.centerX = cmd.target_x;
     m_qualityPlan.centerY = cmd.target_y;
     m_qualityPlan.spacing = cmd.spacing;
@@ -868,9 +906,14 @@ void MainWindow::handleDroneLost(uint32_t droneId) {
         return;
     }
 
-    statusBar()->showMessage(QString("检测到无人机 %1 失联，按 %2 架存活机重新统计")
+    const uint32_t activeCount = static_cast<uint32_t>(m_qualityActiveDroneIds.size());
+    const uint32_t lostCount = m_qualityPlan.expectedCount >= activeCount
+        ? m_qualityPlan.expectedCount - activeCount
+        : 0;
+    statusBar()->showMessage(QString("本轮失联 %1 架（最新失联：#%2），按 %3 架存活机重新统计")
+                             .arg(lostCount)
                              .arg(droneId)
-                             .arg(m_qualityActiveDroneIds.size()));
+                             .arg(activeCount));
 }
 
 void MainWindow::observeStateForQuality(const DroneState& state) {

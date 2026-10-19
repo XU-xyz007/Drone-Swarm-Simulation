@@ -133,6 +133,7 @@ private:
     struct QualityPlan {
         uint32_t formationId = 0;
         std::string formationText;
+        uint32_t expectedCount = 0;
         double centerX = 0.0;
         double centerY = 0.0;
         double spacing = 0.0;
